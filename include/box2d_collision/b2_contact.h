@@ -1,0 +1,264 @@
+// MIT License
+
+// Copyright (c) 2019 Erin Catto
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#ifndef B2_CONTACT_H
+#define B2_CONTACT_H
+
+#include "b2_api.h"
+#include "b2_collision.h"
+#include "b2_fixture.h"
+#include "b2_math.h"
+#include "b2_shape.h"
+
+class b2Body;
+class b2Contact;
+class b2Fixture;
+class b2BlockAllocator;
+class b2StackAllocator;
+
+typedef b2Contact* b2ContactCreateFcn(b2Fixture* fixtureA, int32 indexA,
+        b2Fixture* fixtureB, int32 indexB,
+        b2BlockAllocator* allocator);
+typedef void b2ContactDestroyFcn(b2Contact* contact, b2BlockAllocator* allocator);
+
+struct B2_API b2ContactRegister
+{
+    b2ContactCreateFcn* createFcn;
+    b2ContactDestroyFcn* destroyFcn;
+    bool primary;
+};
+
+/// A contact edge is used to connect bodies and contacts together
+/// in a contact graph where each body is a node and each contact
+/// is an edge. A contact edge belongs to a doubly linked list
+/// maintained in each attached body. Each contact has two contact
+/// nodes, one for each attached body.
+struct B2_API b2ContactEdge
+{
+    b2Body* other;			///< provides quick access to the other body attached.
+    b2Contact* contact;		///< the contact
+    b2ContactEdge* prev;	///< the previous contact edge in the body's contact list
+    b2ContactEdge* next;	///< the next contact edge in the body's contact list
+};
+
+/// The class manages contact between two shapes. A contact exists for each overlapping
+/// AABB in the broad-phase (except if filtered). Therefore a contact object may exist
+/// that has no contact points.
+class B2_API b2Contact
+{
+public:
+
+    /// Get the contact manifold. Do not modify the manifold unless you understand the
+    /// internals of Box2D.
+    b2Manifold* GetManifold();
+    const b2Manifold* GetManifold() const;
+
+    /// Get the world manifold.
+    void GetWorldManifold(b2WorldManifold* worldManifold) const;
+
+    /// Is this contact touching?
+    bool IsTouching() const;
+
+    /// Enable/disable this contact. This can be used inside the pre-solve
+    /// contact listener. The contact is only disabled for the current
+    /// time step (or sub-step in continuous collisions).
+    void SetEnabled(bool flag);
+
+    /// Has this contact been disabled?
+    bool IsEnabled() const;
+
+    /// Get the next contact in the world's contact list.
+    b2Contact* GetNext();
+    const b2Contact* GetNext() const;
+
+    /// Get fixture A in this contact.
+    b2Fixture* GetFixtureA();
+    const b2Fixture* GetFixtureA() const;
+
+    /// Get the child primitive index for fixture A.
+    int32 GetChildIndexA() const;
+
+    /// Get fixture B in this contact.
+    b2Fixture* GetFixtureB();
+    const b2Fixture* GetFixtureB() const;
+
+    /// Get the child primitive index for fixture B.
+    int32 GetChildIndexB() const;
+
+    /// Evaluate this contact with your own manifold and transforms.
+    virtual bool Evaluate(b2Manifold* manifold, const b2Transform& xfA, const b2Transform& xfB) = 0;
+
+protected:
+
+    friend class b2Body;
+    friend class b2Fixture;
+    friend class b2BVHManager;
+
+    // Flags stored in m_flags
+    enum
+    {
+        // Used when crawling contact graph when forming islands.
+        e_islandFlag		= 0x0001,
+
+        // Set when the shapes are touching.
+        e_touchingFlag		= 0x0002,
+
+        // This contact can be disabled (by user)
+        e_enabledFlag		= 0x0004,
+
+        // This contact needs filtering because a fixture filter was changed.
+        e_filterFlag		= 0x0008,
+
+        // This bullet contact had a TOI event
+        e_bulletHitFlag		= 0x0010,
+
+        // This contact has a valid TOI in m_toi
+        e_toiFlag			= 0x0020
+    };
+
+    /// Flag this contact for filtering. Filtering will occur the next time step.
+    void FlagForFiltering();
+
+    static void AddType(b2ContactCreateFcn* createFcn, b2ContactDestroyFcn* destroyFcn,
+            b2Shape::Type typeA, b2Shape::Type typeB);
+    static void InitializeRegisters();
+    static b2Contact* Create(b2Fixture* fixtureA, int32 indexA, b2Fixture* fixtureB, int32 indexB, b2BlockAllocator* allocator);
+    static void Destroy(b2Contact* contact, b2Shape::Type typeA, b2Shape::Type typeB, b2BlockAllocator* allocator);
+    static void Destroy(b2Contact* contact, b2BlockAllocator* allocator);
+
+    b2Contact() : m_fixtureA(nullptr), m_fixtureB(nullptr) {}
+    b2Contact(b2Fixture* fixtureA, int32 indexA, b2Fixture* fixtureB, int32 indexB);
+    virtual ~b2Contact() {}
+
+    static b2ContactRegister s_registers[b2Shape::e_typeCount][b2Shape::e_typeCount];
+    static bool s_initialized;
+
+    uint32 m_flags;
+
+    // World pool and list pointers.
+    b2Contact* m_prev;
+    b2Contact* m_next;
+
+    // Nodes for connecting bodies.
+    b2ContactEdge m_nodeA;
+    b2ContactEdge m_nodeB;
+
+    b2Fixture* m_fixtureA;
+    b2Fixture* m_fixtureB;
+
+    int32 m_indexA;
+    int32 m_indexB;
+
+    b2Manifold m_manifold;
+
+    int32 m_toiCount;
+    b2Scalar m_toi;
+};
+
+B2_FORCE_INLINE b2Manifold* b2Contact::GetManifold()
+{
+    return &m_manifold;
+}
+
+B2_FORCE_INLINE const b2Manifold* b2Contact::GetManifold() const
+{
+    return &m_manifold;
+}
+
+B2_FORCE_INLINE void b2Contact::GetWorldManifold(b2WorldManifold* worldManifold) const
+{
+    const b2Body* bodyA = m_fixtureA->GetBody();
+    const b2Body* bodyB = m_fixtureB->GetBody();
+    const b2Shape* shapeA = m_fixtureA->GetShape();
+    const b2Shape* shapeB = m_fixtureB->GetShape();
+
+    worldManifold->Initialize(&m_manifold, bodyA->GetTransform(), shapeA->m_radius, bodyB->GetTransform(), shapeB->m_radius);
+}
+
+B2_FORCE_INLINE void b2Contact::SetEnabled(bool flag)
+{
+    if (flag)
+    {
+        m_flags |= e_enabledFlag;
+    }
+    else
+    {
+        m_flags &= ~e_enabledFlag;
+    }
+}
+
+B2_FORCE_INLINE bool b2Contact::IsEnabled() const
+{
+    return (m_flags & e_enabledFlag) == e_enabledFlag;
+}
+
+B2_FORCE_INLINE bool b2Contact::IsTouching() const
+{
+    return (m_flags & e_touchingFlag) == e_touchingFlag;
+}
+
+B2_FORCE_INLINE b2Contact* b2Contact::GetNext()
+{
+    return m_next;
+}
+
+B2_FORCE_INLINE const b2Contact* b2Contact::GetNext() const
+{
+    return m_next;
+}
+
+B2_FORCE_INLINE b2Fixture* b2Contact::GetFixtureA()
+{
+    return m_fixtureA;
+}
+
+B2_FORCE_INLINE const b2Fixture* b2Contact::GetFixtureA() const
+{
+    return m_fixtureA;
+}
+
+B2_FORCE_INLINE int32 b2Contact::GetChildIndexA() const
+{
+    return m_indexA;
+}
+
+B2_FORCE_INLINE b2Fixture* b2Contact::GetFixtureB()
+{
+    return m_fixtureB;
+}
+
+B2_FORCE_INLINE const b2Fixture* b2Contact::GetFixtureB() const
+{
+    return m_fixtureB;
+}
+
+B2_FORCE_INLINE int32 b2Contact::GetChildIndexB() const
+{
+    return m_indexB;
+}
+
+B2_FORCE_INLINE void b2Contact::FlagForFiltering()
+{
+    m_flags |= e_filterFlag;
+}
+
+#endif
