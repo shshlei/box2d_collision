@@ -27,17 +27,13 @@
 #include "b2_math.h"
 #include "b2_block_allocator.h"
 #include "b2_stack_allocator.h"
-#include "b2_chain_shape.h"
 #include "b2_circle_shape.h"
 #include "b2_polygon_shape.h"
-#include "b2_edge_shape.h"
+#include "b2_ellipse_shape.h"
 #include "b2_fixture.h"
 #include "b2_body.h"
 #include "b2_callbacks.h"
 #include "b2_broad_phase.h"
-
-#include <vector>
-#include <string>
 
 class B2_API b2BVHManager
 {
@@ -101,10 +97,10 @@ public:
 
     /**@brief Perform a contact test for all objects
      * @param collisions The Contact results data */
-    bool ContactTest(b2WorldManifold* worldManifold, b2InscribedSpheres* inscribedSpheres = nullptr);
+    bool ContactTest(b2Manifold* worldManifold, b2InscribedSpheres* inscribedSpheres = nullptr);
     bool ContactTest(b2ContactResult* contacts = nullptr, b2InscribedSpheres* inscribedSpheres = nullptr);
 
-    bool ContactTest(b2BVHManager *manager, b2WorldManifold* worldManifold, b2InscribedSpheres* inscribedSpheres = nullptr);
+    bool ContactTest(b2BVHManager *manager, b2Manifold* worldManifold, b2InscribedSpheres* inscribedSpheres = nullptr);
     bool ContactTest(b2BVHManager *manager, b2ContactResult* contacts = nullptr, b2InscribedSpheres* inscribedSpheres = nullptr);
 
     /**@brief Perform a distance test for all objects
@@ -200,10 +196,6 @@ public:
     /// @param newOrigin the new origin with respect to the old origin
     void ShiftOrigin(const b2Vec2& newOrigin);
 
-    /// Dump the BVHManager into the log file.
-    /// @warning this should be called outside of a time step.
-    void Dump();
-
     void DestroyContact(b2Contact* c);
 
 private:
@@ -211,7 +203,7 @@ private:
     friend class b2Body;
     friend class b2Fixture;
 
-    bool CalculateContactResult(b2Contact* c, b2WorldManifold* worldManifold, b2InscribedSpheres* inscribedSpheres) const;
+    bool CalculateContactResult(b2Contact* c, b2Manifold* worldManifold, b2InscribedSpheres* inscribedSpheres) const;
 
     bool CalculateContactResult(b2Contact* c, b2ContactResult* contacts, b2InscribedSpheres* inscribedSpheres) const;
 

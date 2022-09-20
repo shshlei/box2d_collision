@@ -278,8 +278,8 @@ void b2TimeOfImpact(b2TOIOutput* output, const b2TOIInput* input)
     b2Scalar tMax = input->tMax;
 
     b2Scalar totalRadius = proxyA->m_radius + proxyB->m_radius;
-    b2Scalar target = b2Max(b2_linearSlop, totalRadius - b2Scalar(3.0) * b2_linearSlop);
-    b2Scalar tolerance = b2Scalar(0.25) * b2_linearSlop;
+    b2Scalar target = b2Max(b2Scalar(0.005), totalRadius - b2Scalar(3.0) * b2Scalar(0.005));
+    b2Scalar tolerance = b2Scalar(0.25) * b2Scalar(0.005);
 //    b2Assert(target > tolerance);
 
     b2Scalar t1 = b2Scalar(0.0);

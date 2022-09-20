@@ -39,9 +39,6 @@ public:
 
     void SetLocalTransform(const b2Transform& xf) override;
 
-    /// @see b2Shape::GetChildCount
-    int32 GetChildCount() const override;
-
     /// Create a convex hull from the given array of local points.
     /// The count must be in the range [3, b2_maxPolygonVertices].
     /// @warning the points may be re-ordered, even if they form a convex polygon
@@ -67,14 +64,10 @@ public:
     /// Implement b2Shape.
     /// @note because the polygon is solid, rays that start inside do not hit because the normal is
     /// not defined.
-    bool RayCast(b2RayCastOutput* output, const b2RayCastInput& input,
-            const b2Transform& transform, int32 childIndex) const override;
+    bool RayCast(b2RayCastOutput* output, const b2RayCastInput& input, const b2Transform& transform) const override;
 
     /// @see b2Shape::ComputeAABB
-    void ComputeAABB(b2AABB* aabb, const b2Transform& transform, int32 childIndex) const override;
-
-    /// @see b2Shape::ComputeMass
-    void ComputeMass(b2MassData* massData, b2Scalar density) const override;
+    void ComputeAABB(b2AABB* aabb, const b2Transform& transform) const override;
 
     bool InscribedSphereAtPoint(const b2Vec2& inp, const b2Vec2& bdp, const b2Vec2& normal, b2Vec2& local_center, b2Scalar &radius) const override;
 
@@ -93,7 +86,6 @@ public:
 B2_FORCE_INLINE b2PolygonShape::b2PolygonShape()
 {
     m_type = e_polygon;
-    m_radius = b2_polygonRadius;
     m_count = 0;
     m_centroid.SetZero();
 }
@@ -108,5 +100,4 @@ B2_FORCE_INLINE void b2PolygonShape::SetLocalTransform(const b2Transform& xf)
         m_normals[i] = b2Mul(xf.q, m_normals[i]);
     }
 }
-
 #endif

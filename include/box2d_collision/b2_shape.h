@@ -29,19 +29,6 @@
 
 class b2BlockAllocator;
 
-/// This holds the mass data computed for a shape.
-struct B2_API b2MassData
-{
-    /// The mass of the shape, usually in kilograms.
-    b2Scalar mass;
-
-    /// The position of the shape's centroid relative to the shape's origin.
-    b2Vec2 center;
-
-    /// The rotational inertia of the shape about the local origin.
-    b2Scalar I;
-};
-
 /// A shape is used for collision detection. You can create a shape however you like.
 /// Shapes used for simulation in b2World are created automatically when a b2Fixture
 /// is created. Shapes may encapsulate a one or more child shapes.
@@ -52,10 +39,9 @@ public:
     enum Type
     {
         e_circle = 0,
-        e_edge = 1,
-        e_polygon = 2,
-        e_chain = 3,
-        e_typeCount = 4
+        e_polygon = 1,
+        e_ellipse = 2,
+        e_typeCount = 3
     };
 
     virtual ~b2Shape() {}
@@ -73,9 +59,6 @@ public:
     /// @return the shape type.
     Type GetType() const;
 
-    /// Get the number of child primitives.
-    virtual int32 GetChildCount() const = 0;
-
     /// Test a point for containment in this shape. This only works for convex shapes.
     /// @param xf the shape world transform.
     /// @param p a point in world coordinates.
@@ -85,28 +68,18 @@ public:
     /// @param output the ray-cast results.
     /// @param input the ray-cast input parameters.
     /// @param transform the transform to be applied to the shape.
-    /// @param childIndex the child shape index
-    virtual bool RayCast(b2RayCastOutput* output, const b2RayCastInput& input,
-            const b2Transform& transform, int32 childIndex) const = 0;
+    virtual bool RayCast(b2RayCastOutput* output, const b2RayCastInput& input, const b2Transform& transform) const = 0;
 
     /// Given a transform, compute the associated axis aligned bounding box for a child shape.
     /// @param aabb returns the axis aligned box.
     /// @param xf the world transform of the shape.
-    /// @param childIndex the child shape
-    virtual void ComputeAABB(b2AABB* aabb, const b2Transform& xf, int32 childIndex) const = 0;
-
-    /// Compute the mass properties of this shape using its dimensions and density.
-    /// The inertia tensor is computed about the local origin.
-    /// @param massData returns the mass data for this shape.
-    /// @param density the density in kilograms per meter squared.
-    virtual void ComputeMass(b2MassData* massData, b2Scalar density) const = 0;
+    virtual void ComputeAABB(b2AABB* aabb, const b2Transform& xf) const = 0;
 
     /// Given an interior point and a boundary point of the shape, find an inscribed sphere. This only works for convex shapes.
-    /// @param xf the shape world transform.
-    /// @param inp an interior point in world coordinates.
-    /// @param bdp a boundary point in world coordinates.
+    /// @param inp an interior point in local coordinates.
+    /// @param bdp a boundary point in local coordinates.
     /// @param normal a normal vector from inp to bdp.
-    /// @param center the inscribed sphere's center.
+    /// @param local_center the inscribed sphere's center.
     /// @param radius the inscribed sphere's radius.
     virtual bool InscribedSphereAtPoint(const b2Vec2& inp, const b2Vec2& bdp, const b2Vec2& normal, b2Vec2& local_center, b2Scalar &radius) const = 0;
 
@@ -114,7 +87,7 @@ public:
 
     /// Radius of a shape. For polygonal shapes this must be b2_polygonRadius. There is no support for
     /// making rounded polygons.
-    b2Scalar m_radius;
+    b2Scalar m_radius{0.0};
 };
 
 B2_FORCE_INLINE b2Shape::Type b2Shape::GetType() const

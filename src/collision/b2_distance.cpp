@@ -21,15 +21,13 @@
 // SOFTWARE.
 
 #include "box2d_collision/b2_circle_shape.h"
-#include "box2d_collision/b2_edge_shape.h"
-#include "box2d_collision/b2_chain_shape.h"
 #include "box2d_collision/b2_polygon_shape.h"
 #include "box2d_collision/b2_distance.h"
 
 // GJK using Voronoi regions (Christer Ericson) and Barycentric coordinates.
 B2_API int32 b2_gjkCalls, b2_gjkIters, b2_gjkMaxIters;
 
-void b2DistanceProxy::Set(const b2Shape* shape, int32 index)
+void b2DistanceProxy::Set(const b2Shape* shape)
 {
     switch (shape->GetType())
     {
@@ -47,37 +45,7 @@ void b2DistanceProxy::Set(const b2Shape* shape, int32 index)
             const b2PolygonShape* polygon = static_cast<const b2PolygonShape*>(shape);
             m_vertices = polygon->m_vertices;
             m_count = polygon->m_count;
-            m_radius = polygon->m_radius;
-        }
-        break;
-
-    case b2Shape::e_chain:
-        {
-            const b2ChainShape* chain = static_cast<const b2ChainShape*>(shape);
-//            b2Assert(0 <= index && index < chain->m_count);
-
-            m_buffer[0] = chain->m_vertices[index];
-            if (index + 1 < chain->m_count)
-            {
-                m_buffer[1] = chain->m_vertices[index + 1];
-            }
-            else
-            {
-                m_buffer[1] = chain->m_vertices[0];
-            }
-
-            m_vertices = m_buffer;
-            m_count = 2;
-            m_radius = chain->m_radius;
-        }
-        break;
-
-    case b2Shape::e_edge:
-        {
-            const b2EdgeShape* edge = static_cast<const b2EdgeShape*>(shape);
-            m_vertices = &edge->m_vertex1;
-            m_count = 2;
-            m_radius = edge->m_radius;
+            m_radius = b2Scalar(0.0);
         }
         break;
 
@@ -598,6 +566,7 @@ void b2Distance(b2DistanceOutput* output,
 // GJK-raycast
 // Algorithm by Gino van den Bergen.
 // "Smooth Mesh Contacts with GJK" in Game Physics Pearls. 2010
+/*
 bool b2ShapeCast(b2ShapeCastOutput * output, const b2ShapeCastInput * input)
 {
     output->iterations = 0;
@@ -742,3 +711,4 @@ bool b2ShapeCast(b2ShapeCastOutput * output, const b2ShapeCastInput * input)
     output->iterations = iter;
     return true;
 }
+*/

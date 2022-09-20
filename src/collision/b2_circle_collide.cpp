@@ -35,18 +35,19 @@ bool b2CollideCircles(b2Manifold* manifold,
     b2Scalar distSqr = b2Dot(d, d);
     b2Scalar rA = circleA->m_radius, rB = circleB->m_radius;
     b2Scalar radius = rA + rB;
-    if (distSqr > radius * radius)
-        return false;
     if (manifold)
     {
-        manifold->type = b2Manifold::e_circles;
-        manifold->localPoint = circleA->m_p;
-        manifold->localNormal.SetZero();
-        manifold->pointCount = 1;
-        manifold->separations[0] = b2Sqrt(distSqr) - radius;
-        manifold->points[0].localPoint = circleB->m_p;
-        manifold->points[0].id.key = 0;
+        manifold->normal.Set(b2Scalar(1.0), b2Scalar(0.0));
+        if (distSqr > b2_epsilon * b2_epsilon)
+        {
+            manifold->normal = d;
+            manifold->normal.Normalize();
+        }
+        manifold->separation = b2Sqrt(distSqr) - radius;
+        manifold->point = pB - rB * manifold->normal;
     }
+    if (distSqr > radius * radius)
+        return false;
     return true;
 }
 
@@ -54,6 +55,7 @@ bool b2CollidePolygonAndCircle(b2Manifold* manifold,
         const b2PolygonShape* polygonA, const b2Transform& xfA,
         const b2CircleShape* circleB, const b2Transform& xfB)
 {
+    bool collision = false;
     // Compute circle position in the frame of the polygon.
     b2Vec2 c = b2Mul(xfB, circleB->m_p);
     b2Vec2 cLocal = b2MulT(xfA, c);
@@ -61,7 +63,7 @@ bool b2CollidePolygonAndCircle(b2Manifold* manifold,
     // Find the min separating edge.
     int32 normalIndex = 0;
     b2Scalar separation = -b2_maxFloat;
-    b2Scalar radius = polygonA->m_radius + circleB->m_radius;
+    b2Scalar radius = circleB->m_radius + polygonA->m_radius;
     int32 vertexCount = polygonA->m_count;
     const b2Vec2* vertices = polygonA->m_vertices;
     const b2Vec2* normals = polygonA->m_normals;
@@ -69,8 +71,7 @@ bool b2CollidePolygonAndCircle(b2Manifold* manifold,
     for (int32 i = 0; i < vertexCount; ++i)
     {
         b2Scalar s = b2Dot(normals[i], cLocal - vertices[i]);
-        if (s > radius)
-            // Early out.
+        if (!manifold && s > radius) // Early out.
             return false;
         if (s > separation)
         {
@@ -84,13 +85,9 @@ bool b2CollidePolygonAndCircle(b2Manifold* manifold,
     {
         if (manifold)
         {
-            manifold->separations[0] = separation - circleB->m_radius;
-            manifold->pointCount = 1;
-            manifold->type = b2Manifold::e_faceA;
-            manifold->localNormal = normals[normalIndex];
-            manifold->localPoint = cLocal - manifold->localNormal * separation;
-            manifold->points[0].localPoint = circleB->m_p;
-            manifold->points[0].id.key = 0;
+            manifold->separation = separation - radius;
+            manifold->normal = b2Mul(xfA.q, normals[normalIndex]);
+            manifold->point = c - manifold->normal * circleB->m_radius;
         }
         return true;
     }
@@ -106,53 +103,39 @@ bool b2CollidePolygonAndCircle(b2Manifold* manifold,
     if (u1 <= b2Scalar(0.0))
     {
         double d = b2DistanceSquared(cLocal, v1);
-        if (d > radius * radius)
-            return false;
+        if (d <= radius * radius)
+            collision = true;
         if (manifold)
         {
-            manifold->separations[0] = b2Sqrt(d) - circleB->m_radius;
-            manifold->pointCount = 1;
-            manifold->type = b2Manifold::e_faceA;
-            manifold->localNormal = cLocal - v1;
-            manifold->localNormal.Normalize();
-            manifold->localPoint = v1;
-            manifold->points[0].localPoint = circleB->m_p;
-            manifold->points[0].id.key = 0;
+            manifold->separation = b2Sqrt(d) - radius;
+            manifold->normal = b2Mul(xfA.q, cLocal - v1);
+            manifold->normal.Normalize();
+            manifold->point = c - manifold->normal * circleB->m_radius;
         }
     }
     else if (u2 <= b2Scalar(0.0))
     {
         double d = b2DistanceSquared(cLocal, v2);
-        if (d > radius * radius)
-            return false;
+        if (d <= radius * radius)
+            collision = true;
         if (manifold)
         {
-            manifold->separations[0] = b2Sqrt(d) - circleB->m_radius;
-            manifold->pointCount = 1;
-            manifold->type = b2Manifold::e_faceA;
-            manifold->localNormal = cLocal - v2;
-            manifold->localNormal.Normalize();
-            manifold->localPoint = v2;
-            manifold->points[0].localPoint = circleB->m_p;
-            manifold->points[0].id.key = 0;
+            manifold->separation = b2Sqrt(d) - radius;
+            manifold->normal = b2Mul(xfA.q, cLocal - v2);
+            manifold->normal.Normalize();
+            manifold->point = c - manifold->normal * circleB->m_radius;
         }
     }
     else
     {
-        b2Vec2 faceCenter = b2Scalar(0.5) * (v1 + v2);
-        b2Scalar s = b2Dot(cLocal - faceCenter, normals[vertIndex1]);
-        if (s > radius)
-            return false;
+        if (separation <= radius)
+            collision = true;
         if (manifold)
         {
-            manifold->separations[0] = separation - circleB->m_radius;
-            manifold->pointCount = 1;
-            manifold->type = b2Manifold::e_faceA;
-            manifold->localNormal = normals[vertIndex1];
-            manifold->localPoint = cLocal - manifold->localNormal * separation;
-            manifold->points[0].localPoint = circleB->m_p;
-            manifold->points[0].id.key = 0;
+            manifold->separation = separation - radius;
+            manifold->normal = b2Mul(xfA.q, normals[normalIndex]);
+            manifold->point = c - manifold->normal * circleB->m_radius;
         }
     }
-    return true;
+    return collision;
 }

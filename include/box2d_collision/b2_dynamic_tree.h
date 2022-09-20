@@ -25,7 +25,7 @@
 
 #include "b2_api.h"
 #include "b2_collision.h"
-#include "b2_growable_stack.h"
+#include <stack>
 
 #define b2_nullNode (-1)
 
@@ -154,6 +154,10 @@ public:
     /// @param newOrigin the new origin with respect to the old origin
     void ShiftOrigin(const b2Vec2& newOrigin);
 
+    void setContactDistanceThreshold(b2Scalar contact_distance);
+
+    b2Scalar getContactDistanceThreshold() const;
+
 private:
 
     int32 AllocateNode();
@@ -179,6 +183,8 @@ private:
     int32 m_freeList;
 
     int32 m_insertionCount;
+
+    b2Scalar m_contact_distance{0.0};
 };
 
 B2_FORCE_INLINE void* b2DynamicTree::GetUserData(int32 proxyId) const
@@ -218,33 +224,27 @@ B2_FORCE_INLINE b2TreeNode* b2DynamicTree::GetNode(int32 nodeId) const
 template <typename T>
 B2_FORCE_INLINE void b2DynamicTree::Query(T* callback, const b2AABB& aabb) const
 {
-    b2GrowableStack<int32, 256> stack;
-    stack.Push(m_root);
-
-    while (stack.GetCount() > 0)
+    std::stack<int32> stack;
+    stack.push(m_root);
+    while (!stack.empty())
     {
-        int32 nodeId = stack.Pop();
+        int32 nodeId = stack.top();
+        stack.pop();
         if (nodeId == b2_nullNode)
-        {
             continue;
-        }
 
         const b2TreeNode* node = m_nodes + nodeId;
-
         if (b2TestOverlap(node->aabb, aabb))
         {
             if (node->IsLeaf())
             {
-                bool proceed = callback->QueryCallback(nodeId);
-                if (proceed == false)
-                {
+                if (!callback->QueryCallback(nodeId))
                     return;
-                }
             }
             else
             {
-                stack.Push(node->child1);
-                stack.Push(node->child2);
+                stack.push(node->child1);
+                stack.push(node->child2);
             }
         }
     }
@@ -253,33 +253,27 @@ B2_FORCE_INLINE void b2DynamicTree::Query(T* callback, const b2AABB& aabb) const
 template <typename T>
 B2_FORCE_INLINE	void b2DynamicTree::Query(T* callback, const b2Vec2& point) const
 {
-    b2GrowableStack<int32, 256> stack;
-    stack.Push(m_root);
-
-    while (stack.GetCount() > 0)
+    std::stack<int32> stack;
+    stack.push(m_root);
+    while (!stack.empty())
     {
-        int32 nodeId = stack.Pop();
+        int32 nodeId = stack.top();
+        stack.pop();
         if (nodeId == b2_nullNode)
-        {
             continue;
-        }
 
         const b2TreeNode* node = m_nodes + nodeId;
-
         if (node->aabb.Contains(point))
         {
             if (node->IsLeaf())
             {
-                bool proceed = callback->QueryCallback(nodeId);
-                if (proceed == false)
-                {
+                if (!callback->QueryCallback(nodeId))
                     return;
-                }
             }
             else
             {
-                stack.Push(node->child1);
-                stack.Push(node->child2);
+                stack.push(node->child1);
+                stack.push(node->child2);
             }
         }
     }
@@ -288,11 +282,12 @@ B2_FORCE_INLINE	void b2DynamicTree::Query(T* callback, const b2Vec2& point) cons
 template <typename T>
 B2_FORCE_INLINE void b2DynamicTree::Query(T* callback, const b2DynamicTree* tree) const
 {
-    b2GrowableStack<std::pair<int32, int32>, 256> stack;
-    stack.Push(std::make_pair(m_root, tree->GetRoot()));
-    while (stack.GetCount() > 0)
+    std::stack<std::pair<int32, int32>> stack;
+    stack.emplace(m_root, tree->GetRoot());
+    while (!stack.empty())
     {
-        std::pair<int32, int32> pair = stack.Pop();
+        std::pair<int32, int32> pair = stack.top();
+        stack.pop();
         int32 nodeId1 = pair.first, nodeId2 = pair.second;
         if (nodeId1 == b2_nullNode || nodeId2 == b2_nullNode)
             continue;
@@ -302,26 +297,25 @@ B2_FORCE_INLINE void b2DynamicTree::Query(T* callback, const b2DynamicTree* tree
         {
             if (node1->IsLeaf() && node2->IsLeaf())
             {
-                bool proceed = callback->QueryCallback(nodeId1, nodeId2);
-                if (!proceed)
+                if (!callback->QueryCallback(nodeId1, nodeId2))
                     return;
             }
             else if (node1->IsLeaf())
             {
-                stack.Push(std::make_pair(nodeId1, node2->child1));
-                stack.Push(std::make_pair(nodeId1, node2->child2));
+                stack.emplace(nodeId1, node2->child1);
+                stack.emplace(nodeId1, node2->child2);
             }
             else if (node2->IsLeaf())
             {
-                stack.Push(std::make_pair(node1->child1, nodeId2));
-                stack.Push(std::make_pair(node1->child2, nodeId2));
+                stack.emplace(node1->child1, nodeId2);
+                stack.emplace(node1->child2, nodeId2);
             }
             else 
             {
-                stack.Push(std::make_pair(node1->child1, node2->child1));
-                stack.Push(std::make_pair(node1->child1, node2->child2));
-                stack.Push(std::make_pair(node1->child2, node2->child1));
-                stack.Push(std::make_pair(node1->child2, node2->child2));
+                stack.emplace(node1->child1, node2->child1);
+                stack.emplace(node1->child1, node2->child2);
+                stack.emplace(node1->child2, node2->child1);
+                stack.emplace(node1->child2, node2->child2);
             }
         }
     }
@@ -353,12 +347,12 @@ B2_FORCE_INLINE void b2DynamicTree::RayCast(T* callback, const b2RayCastInput& i
         segmentAABB.upperBound = b2Max(p1, t);
     }
 
-    b2GrowableStack<int32, 256> stack;
-    stack.Push(m_root);
-
-    while (stack.GetCount() > 0)
+    std::stack<int32> stack;
+    stack.push(m_root);
+    while (!stack.empty())
     {
-        int32 nodeId = stack.Pop();
+        int32 nodeId = stack.top();
+        stack.pop();
         if (nodeId == b2_nullNode)
         {
             continue;
@@ -407,10 +401,20 @@ B2_FORCE_INLINE void b2DynamicTree::RayCast(T* callback, const b2RayCastInput& i
         }
         else
         {
-            stack.Push(node->child1);
-            stack.Push(node->child2);
+            stack.push(node->child1);
+            stack.push(node->child2);
         }
     }
+}
+
+B2_FORCE_INLINE void b2DynamicTree::setContactDistanceThreshold(b2Scalar contact_distance)
+{
+    m_contact_distance = contact_distance;
+}
+
+B2_FORCE_INLINE b2Scalar b2DynamicTree::getContactDistanceThreshold() const
+{
+    return m_contact_distance;
 }
 
 #endif

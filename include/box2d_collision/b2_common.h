@@ -59,31 +59,10 @@
 /// This is a dimensionless multiplier.
 #define b2_aabbMultiplier		b2Scalar(4.0)
 
-/// A small length used as a collision and constraint tolerance. Usually it is
-/// chosen to be numerically significant, but visually insignificant. In meters.
-#define b2_linearSlop			(b2Scalar(0.005) * b2_lengthUnitsPerMeter)
-
-/// A small angle used as a collision and constraint tolerance. Usually it is
-/// chosen to be numerically significant, but visually insignificant.
-#define b2_angularSlop			(b2Scalar(2.0) / b2Scalar(180.0) * b2_pi)
-
-/// The radius of the polygon/edge shape skin. This should not be modified. Making
-/// this smaller means polygons will have an insufficient buffer for continuous collision.
-/// Making it larger may create artifacts for vertex collision.
-#define b2_polygonRadius		(b2Scalar(2.0) * b2_linearSlop)
-
-/// Maximum number of sub-steps per contact in continuous physics simulation.
-#define b2_maxSubSteps			8
-
-
 // Dynamics
 
 /// Maximum number of contacts to be handled to solve a TOI impact.
 #define b2_maxTOIContacts			32
-
-/// The maximum linear position correction used when solving constraints. This helps to
-/// prevent overshoot. Meters.
-#define b2_maxLinearCorrection		(b2Scalar(0.2) * b2_lengthUnitsPerMeter)
 
 /// The maximum angular position correction used when solving constraints. This helps to
 /// prevent overshoot.
@@ -91,7 +70,6 @@
 
 /// The maximum linear translation of a body per step. This limit is very large and is used
 /// to prevent numerical problems. You shouldn't need to adjust this. Meters.
-#define b2_maxTranslation			(b2Scalar(2.0) * b2_lengthUnitsPerMeter)
 #define b2_maxTranslationSquared	(b2_maxTranslation * b2_maxTranslation)
 
 /// The maximum angular velocity of a body. This limit is very large and is used
@@ -105,17 +83,6 @@
 #define b2_baumgarte				b2Scalar(0.2)
 #define b2_toiBaumgarte				b2Scalar(0.75)
 
-
-// Sleep
-
-/// The time that a body must be still before it will go to sleep.
-#define b2_timeToSleep				b2Scalar(0.5)
-
-/// A body cannot sleep if its linear velocity is above this tolerance.
-#define b2_linearSleepTolerance		(b2Scalar(0.01) * b2_lengthUnitsPerMeter)
-
-/// A body cannot sleep if its angular velocity is above this tolerance.
-#define b2_angularSleepTolerance	(b2Scalar(2.0) / b2Scalar(180.0) * b2_pi)
 
 /// Dump to a file. Only one dump file allowed at a time.
 void b2OpenDump(const char* fileName);

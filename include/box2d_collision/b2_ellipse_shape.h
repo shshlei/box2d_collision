@@ -20,20 +20,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef B2_CIRCLE_SHAPE_H
-#define B2_CIRCLE_SHAPE_H
+#ifndef B2_ELLIPSE_SHAPE_H
+#define B2_ELLIPSE_SHAPE_H
 
 #include "b2_api.h"
 #include "b2_shape.h"
 
 /// A solid circle shape
-class B2_API b2CircleShape : public b2Shape
+class B2_API b2EllipseShape : public b2Shape
 {
 public:
-    b2CircleShape();
+    b2EllipseShape();
 
     /// Implement b2Shape.
     b2Shape* Clone(b2BlockAllocator* allocator) const override;
+
+    void SetRadius(b2Scalar r);
+
+    b2Scalar GetRadius() const;
 
     void SetLocalTransform(const b2Transform& xf) override;
 
@@ -43,7 +47,8 @@ public:
     /// Implement b2Shape.
     /// @note because the circle is solid, rays that start inside do not hit because the normal is
     /// not defined.
-    bool RayCast(b2RayCastOutput* output, const b2RayCastInput& input, const b2Transform& transform) const override;
+    bool RayCast(b2RayCastOutput* output, const b2RayCastInput& input,
+            const b2Transform& transform) const override;
 
     /// @see b2Shape::ComputeAABB
     void ComputeAABB(b2AABB* aabb, const b2Transform& transform) const override;
@@ -52,18 +57,31 @@ public:
 
     /// Position
     b2Vec2 m_p;
+
+    /// Radius of a shape. For polygonal shapes this must be b2_polygonRadius. There is no support for
+    /// making rounded polygons.
+    b2Scalar m_radius;
 };
 
-B2_FORCE_INLINE b2CircleShape::b2CircleShape()
+B2_FORCE_INLINE b2EllipseShape::b2EllipseShape()
 {
     m_type = e_circle;
     m_radius = b2Scalar(0.0);
     m_p.SetZero();
 }
 
-B2_FORCE_INLINE void b2CircleShape::SetLocalTransform(const b2Transform& xf)
+B2_FORCE_INLINE void b2EllipseShape::SetLocalTransform(const b2Transform& xf)
 {
     m_p = b2Mul(xf, m_p);
 }
 
+B2_FORCE_INLINE void b2EllipseShape::SetRadius(b2Scalar r)
+{
+    m_radius = r;
+}
+
+B2_FORCE_INLINE b2Scalar b2EllipseShape::GetRadius() const
+{
+    return m_radius;
+}
 #endif

@@ -45,10 +45,6 @@
 
 // Tunable Constants
 
-/// You can use this to change the length scale used by your game.
-/// For example for inches you could use 39.4.
-#define b2_lengthUnitsPerMeter b2Scalar(1.0)
-
 /// The maximum number of vertices on a convex polygon. You cannot increase
 /// this too much because b2BlockAllocator has a maximum object size.
 #define b2_maxPolygonVertices	8
@@ -71,18 +67,6 @@ struct B2_API b2BodyUserData
 struct B2_API b2FixtureUserData
 {
     b2FixtureUserData()
-    {
-        pointer = 0;
-    }
-
-    /// For legacy compatibility
-    uintptr_t pointer;
-};
-
-/// You can define this to inject whatever data you want in b2Joint
-struct B2_API b2JointUserData
-{
-    b2JointUserData()
     {
         pointer = 0;
     }

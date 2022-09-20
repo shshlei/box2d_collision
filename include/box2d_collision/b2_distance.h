@@ -36,7 +36,7 @@ struct B2_API b2DistanceProxy
 
     /// Initialize the proxy using the given shape. The shape
     /// must remain in scope while the proxy is in use.
-    void Set(const b2Shape* shape, int32 index);
+    void Set(const b2Shape* shape);
 
     /// Initialize the proxy using a vertex cloud and radius. The vertices
     /// must remain in scope while the proxy is in use.

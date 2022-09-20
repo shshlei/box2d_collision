@@ -28,33 +28,7 @@
 
 b2Body::b2Body(const b2BodyDef* bd)
 {
-//    b2Assert(bd->position.IsValid());
-//    b2Assert(b2IsValid(bd->angle));
-
     m_name = bd->name;
-
-    m_flags = 0;
-
-    if (bd->bullet)
-    {
-        m_flags |= e_bulletFlag;
-    }
-    if (bd->fixedRotation)
-    {
-        m_flags |= e_fixedRotationFlag;
-    }
-    if (bd->allowSleep)
-    {
-        m_flags |= e_autoSleepFlag;
-    }
-    if (bd->awake && bd->type != b2_staticBody)
-    {
-        m_flags |= e_awakeFlag;
-    }
-    if (bd->enabled)
-    {
-        m_flags |= e_enabledFlag;
-    }
 
     m_xf.p = bd->position;
     m_xf.q.Set(bd->angle);
@@ -69,14 +43,13 @@ b2Body::b2Body(const b2BodyDef* bd)
     m_prev = nullptr;
     m_next = nullptr;
 
-    m_sleepTime = b2Scalar(0.0);
-
     m_type = bd->type;
 
     m_userData = bd->userData;
 
     m_fixtureList = nullptr;
     m_fixtureCount = 0;
+    m_enabled = bd->enabled;
 }
 
 b2Body::~b2Body()
@@ -95,15 +68,13 @@ b2Fixture* b2Body::CreateFixture(const b2FixtureDef* def)
     ++m_fixtureCount;
 
     fixture->m_body = this;
-
     return fixture;
 }
 
-b2Fixture* b2Body::CreateFixture(const b2Shape* shape, b2Scalar density, uint32 shape_index)
+b2Fixture* b2Body::CreateFixture(const b2Shape* shape, uint32 shape_index)
 {
     b2FixtureDef def;
     def.shape = shape;
-    def.density = density;
     def.userData.pointer = shape_index;
     return CreateFixture(&def);
 }
@@ -119,12 +90,8 @@ b2Fixture* b2Body::AddShape(const b2Shape* shape, uint32 shape_index)
 void b2Body::DestroyFixture(b2Fixture* fixture)
 {
     if (fixture == NULL)
-    {
         return;
-    }
-
 //    b2Assert(fixture->m_body == this);
-
     // Remove the fixture from this body's singly linked list.
 //    b2Assert(m_fixtureCount > 0);
     b2Fixture** node = &m_fixtureList;
@@ -137,7 +104,6 @@ void b2Body::DestroyFixture(b2Fixture* fixture)
             found = true;
             break;
         }
-
         node = &(*node)->m_next;
     }
 
@@ -151,31 +117,4 @@ void b2Body::DestroyFixture(b2Fixture* fixture)
     m_blockAllocator->Free(fixture, sizeof(b2Fixture));
 
     --m_fixtureCount;
-}
-
-void b2Body::Dump()
-{
-    int32 bodyIndex = m_islandIndex;
-
-    // %.9g is sufficient to save and load the same value using text
-    // FLT_DECIMAL_DIG == 9
-
-    b2Dump("{\n");
-    b2Dump("  b2BodyDef bd;\n");
-    b2Dump("  bd.type = b2BodyType(%d);\n", m_type);
-    b2Dump("  bd.position.Set(%.9g, %.9g);\n", m_xf.p.x, m_xf.p.y);
-    b2Dump("  bd.angle = %.9g;\n", m_sweep.a);
-    b2Dump("  bd.allowSleep = bool(%d);\n", m_flags & e_autoSleepFlag);
-    b2Dump("  bd.awake = bool(%d);\n", m_flags & e_awakeFlag);
-    b2Dump("  bd.fixedRotation = bool(%d);\n", m_flags & e_fixedRotationFlag);
-    b2Dump("  bd.bullet = bool(%d);\n", m_flags & e_bulletFlag);
-    b2Dump("  bd.enabled = bool(%d);\n", m_flags & e_enabledFlag);
-    b2Dump("\n");
-    for (b2Fixture* f = m_fixtureList; f; f = f->m_next)
-    {
-        b2Dump("  {\n");
-        f->Dump(bodyIndex);
-        b2Dump("  }\n");
-    }
-    b2Dump("}\n");
 }

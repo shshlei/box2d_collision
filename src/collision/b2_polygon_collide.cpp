@@ -24,10 +24,12 @@
 #include "box2d_collision/b2_polygon_shape.h"
 
 // Find the max separation between poly1 and poly2 using edge normals from poly1.
-static b2Scalar b2FindMaxSeparation(int32* edgeIndex,
+static b2Scalar b2FindMaxSeparation(int32* edgeIndex, b2Vec2 *point,
         const b2PolygonShape* poly1, const b2Transform& xf1,
-        const b2PolygonShape* poly2, const b2Transform& xf2)
+        const b2PolygonShape* poly2, const b2Transform& xf2,
+        const b2Manifold* manifold, b2Scalar tol, bool &collision)
 {
+    collision = true;
     int32 count1 = poly1->m_count;
     int32 count2 = poly2->m_count;
     const b2Vec2* n1s = poly1->m_normals;
@@ -45,19 +47,28 @@ static b2Scalar b2FindMaxSeparation(int32* edgeIndex,
 
         // Find deepest point for normal i.
         b2Scalar si = b2_maxFloat;
+        b2Vec2 temp;
         for (int32 j = 0; j < count2; ++j)
         {
             b2Scalar sij = b2Dot(n, v2s[j] - v1);
             if (sij < si)
             {
                 si = sij;
+                temp = v2s[j];
             }
         }
 
-        if (si > maxSeparation)
+        if (maxSeparation <= b2Scalar(0.0) ? si > maxSeparation : si > b2Scalar(0.0) && si < maxSeparation)
         {
             maxSeparation = si;
             bestIndex = i;
+            *point = temp;
+            if (si > tol)
+            {
+                collision = false;
+                if (!manifold)
+                    break;
+            }
         }
     }
 
@@ -65,181 +76,114 @@ static b2Scalar b2FindMaxSeparation(int32* edgeIndex,
     return maxSeparation;
 }
 
-static void b2FindIncidentEdge(b2ClipVertex c[2],
-        const b2PolygonShape* poly1, const b2Transform& xf1, int32 edge1,
-        const b2PolygonShape* poly2, const b2Transform& xf2)
-{
-    const b2Vec2* normals1 = poly1->m_normals;
-
-    int32 count2 = poly2->m_count;
-    const b2Vec2* vertices2 = poly2->m_vertices;
-    const b2Vec2* normals2 = poly2->m_normals;
-
-    //    b2Assert(0 <= edge1 && edge1 < poly1->m_count);
-
-    // Get the normal of the reference edge in poly2's frame.
-    b2Vec2 normal1 = b2MulT(xf2.q, b2Mul(xf1.q, normals1[edge1]));
-
-    // Find the incident edge on poly2.
-    int32 index = 0;
-    b2Scalar minDot = b2_maxFloat;
-    for (int32 i = 0; i < count2; ++i)
-    {
-        b2Scalar dot = b2Dot(normal1, normals2[i]);
-        if (dot < minDot)
-        {
-            minDot = dot;
-            index = i;
-        }
-    }
-
-    // Build the clip vertices for the incident edge.
-    int32 i1 = index;
-    int32 i2 = i1 + 1 < count2 ? i1 + 1 : 0;
-
-    c[0].v = b2Mul(xf2, vertices2[i1]);
-    c[0].id.cf.indexA = (uint8)edge1;
-    c[0].id.cf.indexB = (uint8)i1;
-    c[0].id.cf.typeA = b2ContactFeature::e_face;
-    c[0].id.cf.typeB = b2ContactFeature::e_vertex;
-
-    c[1].v = b2Mul(xf2, vertices2[i2]);
-    c[1].id.cf.indexA = (uint8)edge1;
-    c[1].id.cf.indexB = (uint8)i2;
-    c[1].id.cf.typeA = b2ContactFeature::e_face;
-    c[1].id.cf.typeB = b2ContactFeature::e_vertex;
-}
-
 // Find edge normal of max separation on A - return if separating axis is found
 // Find edge normal of max separation on B - return if separation axis is found
 // Choose reference edge as min(minA, minB)
-// Find incident edge
-// Clip
 
 // The normal points from 1 to 2
 bool b2CollidePolygons(b2Manifold* manifold,
         const b2PolygonShape* polyA, const b2Transform& xfA,
         const b2PolygonShape* polyB, const b2Transform& xfB)
 {
-    b2Scalar totalRadius = polyA->m_radius + polyB->m_radius;
-
+    b2Scalar radius = polyA->m_radius + polyB->m_radius;
+    bool collision = false;
     int32 edgeA = 0;
-    b2Scalar separationA = b2FindMaxSeparation(&edgeA, polyA, xfA, polyB, xfB);
-    if (separationA > totalRadius)
+    b2Vec2 pointB;
+    b2Scalar separationA = b2FindMaxSeparation(&edgeA, &pointB, polyA, xfA, polyB, xfB, manifold, radius, collision);
+    if (!collision && !manifold)
         return false;
 
     int32 edgeB = 0;
-    b2Scalar separationB = b2FindMaxSeparation(&edgeB, polyB, xfB, polyA, xfA);
-    if (separationB > totalRadius)
+    b2Vec2 pointA;
+    b2Scalar separationB = b2FindMaxSeparation(&edgeB, &pointA, polyB, xfB, polyA, xfA, manifold, radius, collision);
+    if (!collision && !manifold)
         return false;
 
-    const b2PolygonShape* poly1;	// reference polygon
-    const b2PolygonShape* poly2;	// incident polygon
-    b2Transform xf1, xf2;
-    int32 edge1;					// reference edge
-    uint8 flip;
-    const b2Scalar k_tol = b2Scalar(0.1) * b2_linearSlop;
-
-    if (separationB > separationA + k_tol)
+    const b2PolygonShape* poly1 = polyA;
+    b2Transform xf1 = xfA;
+    int32 edge1 = edgeA;
+    b2Scalar separation = separationA;
+    b2Vec2 c = b2Mul(xfB, pointB);
+    bool flip = false;
+    if (collision ? separationB > separationA : separationB < separationA)
     {
         poly1 = polyB;
-        poly2 = polyA;
         xf1 = xfB;
-        xf2 = xfA;
         edge1 = edgeB;
-        flip = 1;
+        separation = separationB;
+        c = b2Mul(xfA, pointA);
+        flip = true;
+    }
+
+    collision = false;
+
+    // If the point is inside the polygon ...
+    if (separation <= b2_epsilon)
+    {
+        collision = true;
+        if (manifold)
+        {
+            manifold->separation = separation - radius;
+            manifold->normal = b2Mul(xf1.q, poly1->m_normals[edge1]);
+        }
     }
     else
     {
-        poly1 = polyA;
-        poly2 = polyB;
-        xf1 = xfA;
-        xf2 = xfB;
-        edge1 = edgeA;
-        flip = 0;
+        b2Vec2 cLocal = b2MulT(xf1, c);
+        // Vertices that subtend the incident face.
+        int32 vertIndex1 = edge1;
+        int32 vertIndex2 = vertIndex1 + 1 < poly1->m_count ? vertIndex1 + 1 : 0;
+        b2Vec2 v1 = poly1->m_vertices[vertIndex1];
+        b2Vec2 v2 = poly1->m_vertices[vertIndex2];
+        // Compute barycentric coordinates
+        b2Scalar u1 = b2Dot(cLocal - v1, v2 - v1);
+        b2Scalar u2 = b2Dot(cLocal - v2, v1 - v2);
+        if (u1 <= b2Scalar(0.0))
+        {
+            double d = b2DistanceSquared(cLocal, v1);
+            if (d <= radius * radius)
+                collision = true;
+            if (manifold)
+            {
+                manifold->separation = b2Sqrt(d) - radius;
+                manifold->normal = b2Mul(xf1.q, cLocal - v1);
+                manifold->normal.Normalize();
+            }
+        }
+        else if (u2 <= b2Scalar(0.0))
+        {
+            double d = b2DistanceSquared(cLocal, v2);
+            if (d <= radius * radius)
+                collision = true;
+            if (manifold)
+            {
+                manifold->separation = b2Sqrt(d) - radius;
+                manifold->normal = b2Mul(xf1.q, cLocal - v2);
+                manifold->normal.Normalize();
+            }
+        }
+        else
+        {
+            if (separation <= radius)
+                collision = true;
+            if (manifold)
+            {
+                manifold->separation = separation - radius;
+                manifold->normal = b2Mul(xf1.q, poly1->m_normals[edge1]);
+            }
+        }
     }
-
-    b2ClipVertex incidentEdge[2];
-    b2FindIncidentEdge(incidentEdge, poly1, xf1, edge1, poly2, xf2);
-
-    int32 count1 = poly1->m_count;
-    const b2Vec2* vertices1 = poly1->m_vertices;
-
-    int32 iv1 = edge1;
-    int32 iv2 = edge1 + 1 < count1 ? edge1 + 1 : 0;
-
-    b2Vec2 v11 = vertices1[iv1];
-    b2Vec2 v12 = vertices1[iv2];
-
-    b2Vec2 localTangent = v12 - v11;
-    localTangent.Normalize();
-
-    b2Vec2 localNormal = b2Cross(localTangent, b2Scalar(1.0));
-    b2Vec2 planePoint = b2Scalar(0.5) * (v11 + v12);
-
-    b2Vec2 tangent = b2Mul(xf1.q, localTangent);
-    b2Vec2 normal = b2Cross(tangent, b2Scalar(1.0));
-
-    v11 = b2Mul(xf1, v11);
-    v12 = b2Mul(xf1, v12);
-
-    // Face offset.
-    b2Scalar frontOffset = b2Dot(normal, v11);
-
-    // Side offsets, extended by polytope skin thickness.
-    b2Scalar sideOffset1 = -b2Dot(tangent, v11) + totalRadius;
-    b2Scalar sideOffset2 = b2Dot(tangent, v12) + totalRadius;
-
-    // Clip incident edge against extruded edge1 side edges.
-    b2ClipVertex clipPoints1[2];
-    b2ClipVertex clipPoints2[2];
-    int np;
-
-    // Clip to box side 1
-    np = b2ClipSegmentToLine(clipPoints1, incidentEdge, -tangent, sideOffset1, iv1);
-
-    if (np < 2)
-        return false;
-
-    // Clip to negative box side 1
-    np = b2ClipSegmentToLine(clipPoints2, clipPoints1,  tangent, sideOffset2, iv2);
-
-    if (np < 2)
-        return false;
-
-    // Now clipPoints2 contains the clipped points.
     if (manifold)
     {
         if (flip)
-            manifold->type = b2Manifold::e_faceB;
-        else 
-            manifold->type = b2Manifold::e_faceA;
-        manifold->localNormal = localNormal;
-        manifold->localPoint = planePoint;
-        int32 pointCount = 0;
-        for (int32 i = 0; i < b2_maxManifoldPoints; ++i)
+            manifold->point = c - manifold->normal * polyA->m_radius;
+        else
+            manifold->point = c - manifold->normal * polyB->m_radius;
+        if (flip)
         {
-            b2Scalar separation = b2Dot(normal, clipPoints2[i].v) - frontOffset;
-
-            if (separation <= totalRadius)
-            {
-                b2ManifoldPoint* cp = manifold->points + pointCount;
-                cp->localPoint = b2MulT(xf2, clipPoints2[i].v);
-                cp->id = clipPoints2[i].id;
-                manifold->separations[pointCount] = separation;
-                if (flip)
-                {
-                    // Swap features
-                    b2ContactFeature cf = cp->id.cf;
-                    cp->id.cf.indexA = cf.indexB;
-                    cp->id.cf.indexB = cf.indexA;
-                    cp->id.cf.typeA = cf.typeB;
-                    cp->id.cf.typeB = cf.typeA;
-                }
-                ++pointCount;
-            }
+            manifold->normal = -manifold->normal;
+            manifold->point = manifold->point + manifold->normal * manifold->separation;
         }
-        manifold->pointCount = pointCount;
     }
-    return true;
+    return collision;
 }

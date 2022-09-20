@@ -25,15 +25,15 @@
 
 #include <new>
 
-b2Shape* b2CircleShape::Clone(b2BlockAllocator* allocator) const
+b2Shape* b2EllipseShape::Clone(b2BlockAllocator* allocator) const
 {
-    void* mem = allocator->Allocate(sizeof(b2CircleShape));
-    b2CircleShape* clone = new (mem) b2CircleShape;
+    void* mem = allocator->Allocate(sizeof(b2EllipseShape));
+    b2EllipseShape* clone = new (mem) b2EllipseShape;
     *clone = *this;
     return clone;
 }
 
-bool b2CircleShape::TestPoint(const b2Transform& transform, const b2Vec2& p) const
+bool b2EllipseShape::TestPoint(const b2Transform& transform, const b2Vec2& p) const
 {
     b2Vec2 center = transform.p + b2Mul(transform.q, m_p);
     b2Vec2 d = p - center;
@@ -44,7 +44,8 @@ bool b2CircleShape::TestPoint(const b2Transform& transform, const b2Vec2& p) con
 // From Section 3.1.2
 // x = s + a * r
 // norm(x) = radius
-bool b2CircleShape::RayCast(b2RayCastOutput* output, const b2RayCastInput& input, const b2Transform& transform) const
+bool b2EllipseShape::RayCast(b2RayCastOutput* output, const b2RayCastInput& input,
+        const b2Transform& transform) const
 {
     b2Vec2 position = transform.p + b2Mul(transform.q, m_p);
     b2Vec2 s = input.p1 - position;
@@ -78,14 +79,14 @@ bool b2CircleShape::RayCast(b2RayCastOutput* output, const b2RayCastInput& input
     return false;
 }
 
-void b2CircleShape::ComputeAABB(b2AABB* aabb, const b2Transform& transform) const
+void b2EllipseShape::ComputeAABB(b2AABB* aabb, const b2Transform& transform) const
 {
     b2Vec2 p = transform.p + b2Mul(transform.q, m_p);
     aabb->lowerBound.Set(p.x - m_radius, p.y - m_radius);
     aabb->upperBound.Set(p.x + m_radius, p.y + m_radius);
 }
 
-bool b2CircleShape::InscribedSphereAtPoint(const b2Vec2& /*inp*/, const b2Vec2& /*bdp*/, const b2Vec2& /*normal*/, b2Vec2& local_center, b2Scalar &radius) const
+bool b2EllipseShape::InscribedSphereAtPoint(const b2Vec2& /*inp*/, const b2Vec2& /*bdp*/, const b2Vec2& /*normal*/, b2Vec2& local_center, b2Scalar &radius) const
 {
     if (m_radius < B2_EPSILON)
         return false;

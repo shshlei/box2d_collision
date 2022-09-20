@@ -30,7 +30,6 @@ struct b2Vec2;
 struct b2Transform;
 class b2Fixture;
 class b2Body;
-class b2Joint;
 class b2Contact;
 struct b2Manifold;
 
@@ -55,7 +54,7 @@ public:
 
     /// Called for each fixture found in the query AABB.
     /// @return false to terminate the query.
-    virtual bool ReportFixture(b2Fixture* fixture, int32 childIndex) = 0;
+    virtual bool ReportFixture(b2Fixture* fixture) = 0;
 };
 
 class B2_API b2QueryCallback2
@@ -65,7 +64,7 @@ public:
 
     /// Called for each fixture found in the query AABB.
     /// @return false to terminate the query.
-    virtual bool ReportFixture(b2Fixture* fixtureA, int32 childIndexA, b2Fixture* fixtureB, int32 childIndexB) = 0;
+    virtual bool ReportFixture(b2Fixture* fixtureA, b2Fixture* fixtureB) = 0;
 };
 
 /// Callback class for ray casts.
@@ -87,8 +86,7 @@ public:
     /// @param fraction the fraction along the ray at the point of intersection
     /// @return -1 to filter, 0 to terminate, fraction to clip the ray for
     /// closest hit, 1 to continue
-    virtual float ReportFixture(b2Fixture* fixture, const b2Vec2& point,
-            const b2Vec2& normal, float fraction) = 0;
+    virtual float ReportFixture(b2Fixture* fixture, const b2Vec2& point, const b2Vec2& normal, float fraction) = 0;
 };
 
 #endif

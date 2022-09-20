@@ -72,11 +72,6 @@ void b2PolygonShape::SetAsBox(b2Scalar hx, b2Scalar hy, const b2Vec2& center, b2
     }
 }
 
-B2_FORCE_INLINE int32 b2PolygonShape::GetChildCount() const
-{
-    return 1;
-}
-
 static b2Vec2 ComputeCentroid(const b2Vec2* vs, int32 count)
 {
     //    b2Assert(count >= 3);
@@ -155,19 +150,15 @@ bool b2PolygonShape::TestPoint(const b2Transform& xf, const b2Vec2& p) const
     {
         b2Scalar dot = b2Dot(m_normals[i], pLocal - m_vertices[i]);
         if (dot > b2Scalar(0.0))
-        {
             return false;
-        }
     }
 
     return true;
 }
 
 bool b2PolygonShape::RayCast(b2RayCastOutput* output, const b2RayCastInput& input,
-        const b2Transform& xf, int32 childIndex) const
+        const b2Transform& xf) const
 {
-    B2_NOT_USED(childIndex);
-
     // Put the ray into the polygon's frame of reference.
     b2Vec2 p1 = b2MulT(xf.q, input.p1 - xf.p);
     b2Vec2 p2 = b2MulT(xf.q, input.p2 - xf.p);
@@ -235,10 +226,8 @@ bool b2PolygonShape::RayCast(b2RayCastOutput* output, const b2RayCastInput& inpu
     return false;
 }
 
-void b2PolygonShape::ComputeAABB(b2AABB* aabb, const b2Transform& xf, int32 childIndex) const
+void b2PolygonShape::ComputeAABB(b2AABB* aabb, const b2Transform& xf) const
 {
-    B2_NOT_USED(childIndex);
-
     b2Vec2 lower = b2Mul(xf, m_vertices[0]);
     b2Vec2 upper = lower;
 
@@ -252,82 +241,6 @@ void b2PolygonShape::ComputeAABB(b2AABB* aabb, const b2Transform& xf, int32 chil
     b2Vec2 r(m_radius, m_radius);
     aabb->lowerBound = lower - r;
     aabb->upperBound = upper + r;
-}
-
-void b2PolygonShape::ComputeMass(b2MassData* massData, b2Scalar density) const
-{
-    // Polygon mass, centroid, and inertia.
-    // Let rho be the polygon density in mass per unit area.
-    // Then:
-    // mass = rho * int(dA)
-    // centroid.x = (1/mass) * rho * int(x * dA)
-    // centroid.y = (1/mass) * rho * int(y * dA)
-    // I = rho * int((x*x + y*y) * dA)
-    //
-    // We can compute these integrals by summing all the integrals
-    // for each triangle of the polygon. To evaluate the integral
-    // for a single triangle, we make a change of variables to
-    // the (u,v) coordinates of the triangle:
-    // x = x0 + e1x * u + e2x * v
-    // y = y0 + e1y * u + e2y * v
-    // where 0 <= u && 0 <= v && u + v <= 1.
-    //
-    // We integrate u from [0,1-v] and then v from [0,1].
-    // We also need to use the Jacobian of the transformation:
-    // D = cross(e1, e2)
-    //
-    // Simplification: triangle centroid = (1/3) * (p1 + p2 + p3)
-    //
-    // The rest of the derivation is handled by computer algebra.
-
-    //    b2Assert(m_count >= 3);
-
-    b2Vec2 center(b2Scalar(0.0), b2Scalar(0.0));
-    b2Scalar area = b2Scalar(0.0);
-    b2Scalar I = b2Scalar(0.0);
-
-    // Get a reference point for forming triangles.
-    // Use the first vertex to reduce round-off errors.
-    b2Vec2 s = m_vertices[0];
-
-    const b2Scalar k_inv3 = b2Scalar(1.0) / b2Scalar(3.0);
-
-    for (int32 i = 0; i < m_count; ++i)
-    {
-        // Triangle vertices.
-        b2Vec2 e1 = m_vertices[i] - s;
-        b2Vec2 e2 = i + 1 < m_count ? m_vertices[i+1] - s : m_vertices[0] - s;
-
-        b2Scalar D = b2Cross(e1, e2);
-
-        b2Scalar triangleArea = b2Scalar(0.5) * D;
-        area += triangleArea;
-
-        // Area weighted centroid
-        center += triangleArea * k_inv3 * (e1 + e2);
-
-        b2Scalar ex1 = e1.x, ey1 = e1.y;
-        b2Scalar ex2 = e2.x, ey2 = e2.y;
-
-        b2Scalar intx2 = ex1*ex1 + ex2*ex1 + ex2*ex2;
-        b2Scalar inty2 = ey1*ey1 + ey2*ey1 + ey2*ey2;
-
-        I += (b2Scalar(0.25) * k_inv3 * D) * (intx2 + inty2);
-    }
-
-    // Total mass
-    massData->mass = density * area;
-
-    // Center of mass
-    //    b2Assert(area > b2_epsilon);
-    center *= b2Scalar(1.0) / area;
-    massData->center = center + s;
-
-    // Inertia tensor relative to the local origin (point s).
-    massData->I = density * I;
-
-    // Shift to center of mass then to original body origin.
-    massData->I += massData->mass * (b2Dot(massData->center, massData->center) - b2Dot(center, center));
 }
 
 b2Scalar b2PolygonShape::ComputeArea() const
@@ -467,7 +380,7 @@ bool b2PolygonShape::InscribedSphereAtPoint(const b2Vec2& inp_, const b2Vec2& bd
                 bestIndex = i;
             }
         }
-        if (maxSeparation < -eps)
+        if (maxSeparation < -eps) // inner point
         {
             if (s == b2Scalar(0.0) && b2Dot(m_normals[bestIndex], normal) >= -eps)
                 break;

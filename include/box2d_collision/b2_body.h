@@ -56,10 +56,6 @@ struct B2_API b2BodyDef
         type = b2_staticBody;
         position.Set(b2Scalar(0.0), b2Scalar(0.0));
         angle = b2Scalar(0.0);
-        allowSleep = true;
-        awake = true;
-        fixedRotation = false;
-        bullet = false;
         enabled = true;
     }
 
@@ -75,22 +71,6 @@ struct B2_API b2BodyDef
 
     /// The world angle of the body in radians.
     b2Scalar angle;
-
-    /// Set this flag to false if this body should never fall asleep. Note that
-    /// this increases CPU usage.
-    bool allowSleep;
-
-    /// Is this body initially awake or sleeping?
-    bool awake;
-
-    /// Should this body be prevented from rotating? Useful for characters.
-    bool fixedRotation;
-
-    /// Is this a fast moving body that should be prevented from tunneling through
-    /// other moving bodies? Note that all bodies are prevented from tunneling through
-    /// kinematic and static bodies. This setting is only considered on dynamic bodies.
-    /// @warning You should use this flag sparingly since it increases processing time.
-    bool bullet;
 
     /// Does this body start out enabled?
     bool enabled;
@@ -126,7 +106,6 @@ public:
     /// Creates a fixture and attach it to this body. Use this function if you need
     /// to set some fixture parameters, like friction. Otherwise you can create the
     /// fixture directly from a shape.
-    /// If the density is non-zero, this function automatically updates the mass of the body.
     /// Contacts are not created until the next time step.
     /// @param def the fixture definition.
     /// @warning This function is locked during callbacks.
@@ -135,18 +114,15 @@ public:
     /// Creates a fixture from a shape and attach it to this body.
     /// This is a convenience function. Use b2FixtureDef if you need to set parameters
     /// like friction, restitution, user data, or filtering.
-    /// If the density is non-zero, this function automatically updates the mass of the body.
     /// @param shape the shape to be cloned.
-    /// @param density the shape density (set to zero for static bodies).
     /// @warning This function is locked during callbacks.
-    b2Fixture* CreateFixture(const b2Shape* shape, b2Scalar density, uint32 shape_index = 0);
+    b2Fixture* CreateFixture(const b2Shape* shape, uint32 shape_index = 0);
 
     b2Fixture* AddShape(const b2Shape* shape, uint32 shape_index = 0);
 
     /// Destroy a fixture. This removes the fixture from the broad-phase and
     /// destroys all contacts associated with this fixture. This will
     /// automatically adjust the mass of the body if the body is dynamic and the
-    /// fixture has positive density.
     /// All fixtures attached to a body are implicitly destroyed when the body is destroyed.
     /// @param fixture the fixture to be removed.
     /// @warning This function is locked during callbacks.
@@ -209,28 +185,6 @@ public:
     /// Get the type of this body.
     b2BodyType GetType() const;
 
-    /// Should this body be treated like a bullet for continuous collision detection?
-    void SetBullet(bool flag);
-
-    /// Is this body treated like a bullet for continuous collision detection?
-    bool IsBullet() const;
-
-    /// You can disable sleeping on this body. If you disable sleeping, the
-    /// body will be woken.
-    void SetSleepingAllowed(bool flag);
-
-    /// Is this body allowed to sleep
-    bool IsSleepingAllowed() const;
-
-    /// Set the sleep state of the body. A sleeping body has very
-    /// low CPU cost.
-    /// @param flag set to true to wake the body, false to put it to sleep.
-    void SetAwake(bool flag);
-
-    /// Get the sleeping state of this body.
-    /// @return true if the body is awake.
-    bool IsAwake() const;
-
     /// Allow a body to be disabled. A disabled body is not simulated and cannot
     /// be collided with or woken up.
     /// If you pass a flag of true, all fixtures will be added to the broad-phase.
@@ -250,13 +204,6 @@ public:
 
     bool IsActive() const;
 
-    /// Set this body to have fixed rotation. This causes the mass
-    /// to be reset.
-    void SetFixedRotation(bool flag);
-
-    /// Does this body have fixed rotation?
-    bool IsFixedRotation() const;
-
     /// Get the list of all fixtures attached to this body.
     b2Fixture* GetFixtureList();
     const b2Fixture* GetFixtureList() const;
@@ -271,27 +218,12 @@ public:
     b2BodyUserData& GetUserData();
     const b2BodyUserData& GetUserData() const;
 
-    /// Dump this body to a file
-    void Dump();
-
 private:
 
     friend class b2Contact;
     friend class b2BVHManager;
 
     std::string m_name;
-
-    // m_flags
-    enum
-    {
-        e_islandFlag		= 0x0001,
-        e_awakeFlag			= 0x0002,
-        e_autoSleepFlag		= 0x0004,
-        e_bulletFlag		= 0x0008,
-        e_fixedRotationFlag	= 0x0010,
-        e_enabledFlag		= 0x0020,
-        e_toiFlag			= 0x0040
-    };
 
     // This is used to prevent connected bodies from colliding.
     // It may lie, depending on the collideConnected flag.
@@ -300,10 +232,6 @@ private:
     b2BlockAllocator *m_blockAllocator;
 
     b2BodyType m_type;
-
-    uint16 m_flags;
-
-    int32 m_islandIndex;
 
     b2Transform m_xf;		// the body origin transform
     b2Sweep m_sweep;		// the swept motion for CCD
@@ -314,21 +242,15 @@ private:
     b2Fixture* m_fixtureList;
     int32 m_fixtureCount;
 
-    b2Scalar m_sleepTime;
-
     b2BodyUserData m_userData;
+
+    /// Does this body start out enabled?
+    bool m_enabled;
 };
 
 B2_FORCE_INLINE void b2Body::SetType(b2BodyType type)
 {
-    if (m_type == type)
-    {
-        return;
-    }
-
     m_type = type;
-
-    SetAwake(true);
 }
 
 B2_FORCE_INLINE b2BodyType b2Body::GetType() const
@@ -415,108 +337,19 @@ B2_FORCE_INLINE b2Vec2 b2Body::GetLocalVector(const b2Vec2& worldVector) const
     return b2MulT(m_xf.q, worldVector);
 }
 
-B2_FORCE_INLINE void b2Body::SetBullet(bool flag)
-{
-    if (flag)
-    {
-        m_flags |= e_bulletFlag;
-    }
-    else
-    {
-        m_flags &= ~e_bulletFlag;
-    }
-}
-
-B2_FORCE_INLINE bool b2Body::IsBullet() const
-{
-    return (m_flags & e_bulletFlag) == e_bulletFlag;
-}
-
-B2_FORCE_INLINE void b2Body::SetAwake(bool flag)
-{
-    if (m_type == b2_staticBody)
-    {
-        return;
-    }
-
-    if (flag)
-    {
-        m_flags |= e_awakeFlag;
-        m_sleepTime = b2Scalar(0.0);
-    }
-    else
-    {
-        m_flags &= ~e_awakeFlag;
-        m_sleepTime = b2Scalar(0.0);
-    }
-}
-
-B2_FORCE_INLINE bool b2Body::IsAwake() const
-{
-    return (m_flags & e_awakeFlag) == e_awakeFlag;
-}
-
 B2_FORCE_INLINE void b2Body::SetEnabled(bool flag)
 {
-    if (flag)
-    {
-        m_flags |= e_enabledFlag;
-    }
-    else
-    {
-        m_flags &= ~e_enabledFlag;
-    }
+    m_enabled = true;
 }
 
 B2_FORCE_INLINE bool b2Body::IsEnabled() const
 {
-    return (m_flags & e_enabledFlag) == e_enabledFlag;
+    return m_enabled;
 }
 
 B2_FORCE_INLINE bool b2Body::IsActive() const
 {
     return m_type != b2_staticBody;
-}
-
-B2_FORCE_INLINE void b2Body::SetFixedRotation(bool flag)
-{
-    bool status = (m_flags & e_fixedRotationFlag) == e_fixedRotationFlag;
-    if (status == flag)
-    {
-        return;
-    }
-
-    if (flag)
-    {
-        m_flags |= e_fixedRotationFlag;
-    }
-    else
-    {
-        m_flags &= ~e_fixedRotationFlag;
-    }
-}
-
-B2_FORCE_INLINE bool b2Body::IsFixedRotation() const
-{
-    return (m_flags & e_fixedRotationFlag) == e_fixedRotationFlag;
-}
-
-B2_FORCE_INLINE void b2Body::SetSleepingAllowed(bool flag)
-{
-    if (flag)
-    {
-        m_flags |= e_autoSleepFlag;
-    }
-    else
-    {
-        m_flags &= ~e_autoSleepFlag;
-        SetAwake(true);
-    }
-}
-
-B2_FORCE_INLINE bool b2Body::IsSleepingAllowed() const
-{
-    return (m_flags & e_autoSleepFlag) == e_autoSleepFlag;
 }
 
 B2_FORCE_INLINE b2Fixture* b2Body::GetFixtureList()
@@ -558,10 +391,7 @@ B2_FORCE_INLINE bool b2Body::ShouldCollide(const b2Body* other) const
 {
     // At least one body should be dynamic.
     if (m_type != b2_dynamicBody && other->m_type != b2_dynamicBody)
-    {
         return false;
-    }
-
     return true;
 }
 

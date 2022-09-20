@@ -189,22 +189,14 @@ bool b2DynamicTree::MoveProxy(int32 proxyId, const b2AABB& aabb, const b2Vec2& d
     b2Vec2 d = b2_aabbMultiplier * displacement;
 
     if (d.x < b2Scalar(0.0))
-    {
         fatAABB.lowerBound.x += d.x;
-    }
     else
-    {
         fatAABB.upperBound.x += d.x;
-    }
 
     if (d.y < b2Scalar(0.0))
-    {
         fatAABB.lowerBound.y += d.y;
-    }
     else
-    {
         fatAABB.upperBound.y += d.y;
-    }
 
     const b2AABB& treeAABB = m_nodes[proxyId].aabb;
     if (treeAABB.Contains(aabb))
@@ -217,12 +209,9 @@ bool b2DynamicTree::MoveProxy(int32 proxyId, const b2AABB& aabb, const b2Vec2& d
         hugeAABB.upperBound = fatAABB.upperBound + b2Scalar(4.0) * r;
 
         if (hugeAABB.Contains(treeAABB))
-        {
             // The tree AABB contains the object AABB and the tree AABB is
             // not too large. No tree update needed.
             return false;
-        }
-
         // Otherwise the tree AABB is huge and needs to be shrunk
     }
 
@@ -245,9 +234,7 @@ bool b2DynamicTree::UpdateProxy(int32 proxyId, const b2AABB& aabb)
 
     const b2AABB& treeAABB = m_nodes[proxyId].aabb;
     if (treeAABB.Contains(aabb))
-    {
         return false;
-    }
 
     RemoveLeaf(proxyId);
 
