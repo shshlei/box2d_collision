@@ -143,6 +143,10 @@ public:
     void ClearBufferActive();
     void ClearBufferPairs();
 
+    void setContactDistanceThreshold(b2Scalar contact_distance);
+
+    b2Scalar getContactDistanceThreshold() const;
+
 private:
 
     friend class b2DynamicTree;
@@ -271,7 +275,7 @@ void b2BroadPhase::UpdateDistancePairs(T* callback)
         // we don't fail to create a pair that may touch later.
         const b2AABB& fatAABB = m_tree.GetFatAABB(m_queryProxyId);
         // Query tree, create pairs and add them pair buffer.
-        m_tree.Query(this, fatAABB);
+        m_tree.QueryDistance(this, fatAABB);
     }
 
     // Send pairs to caller
@@ -279,7 +283,7 @@ void b2BroadPhase::UpdateDistancePairs(T* callback)
     {
         void* userDataA = m_tree.GetUserData(primaryPair.proxyIdA);
         void* userDataB = m_tree.GetUserData(primaryPair.proxyIdB);
-        callback->AddPair(userDataA, userDataB);
+        callback->AddPairDistance(userDataA, userDataB);
     }
 }
 
@@ -321,4 +325,15 @@ B2_FORCE_INLINE bool b2BroadPhase::IsActive(int32 proxyId) const
 {
     return m_activeBuffer.find(proxyId) != m_activeBuffer.end();
 }
+
+B2_FORCE_INLINE void b2BroadPhase::setContactDistanceThreshold(b2Scalar contact_distance)
+{
+    m_tree.setContactDistanceThreshold(contact_distance);
+}
+
+B2_FORCE_INLINE b2Scalar b2BroadPhase::getContactDistanceThreshold() const
+{
+    return m_tree.getContactDistanceThreshold();
+}
+
 #endif

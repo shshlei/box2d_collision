@@ -38,10 +38,13 @@ int main()
     manager.AddBody("box2", &dynamicBox, true);
 
     b2Transform boxxf(b2Vec2(0.0, -10.0), 0.0);
-    manager.SetBodyTransform("box1", boxxf);
+    manager.SetBodyTransform("box2", boxxf);
 
     bool collision = manager.ContactTest();
     printf("Collision: %d\n", collision);
+
+    b2Scalar distance = manager.DistanceTest();
+    printf("Distance: %f\n", distance);
 
     return 0;
 }

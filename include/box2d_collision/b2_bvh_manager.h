@@ -105,10 +105,15 @@ public:
 
     /**@brief Perform a distance test for all objects
      * @param collisions The Contact results data */
-    b2Scalar DistanceTest();
+    b2Scalar DistanceTest(b2Manifold* worldManifold = nullptr);
+
+    b2Scalar DistanceTest(b2ContactResult* contacts);
 
     // Broad-phase callback.
     void AddPair(void* proxyUserDataA, void* proxyUserDataB);
+
+    // Broad-phase callback.
+    void AddPairDistance(void* proxyUserDataA, void* proxyUserDataB);
 
     b2Body* GetBody(const std::string& name);
 
@@ -198,14 +203,22 @@ public:
 
     void DestroyContact(b2Contact* c);
 
+    void setContactDistanceThreshold(b2Scalar contact_distance);
+
+    b2Scalar getContactDistanceThreshold() const;
+
 private:
 
     friend class b2Body;
     friend class b2Fixture;
 
-    bool CalculateContactResult(b2Contact* c, b2Manifold* worldManifold, b2InscribedSpheres* inscribedSpheres) const;
+    bool CalculateContactResult(b2Contact* c, b2Manifold* worldManifold = nullptr, b2InscribedSpheres* inscribedSpheres = nullptr) const;
 
-    bool CalculateContactResult(b2Contact* c, b2ContactResult* contacts, b2InscribedSpheres* inscribedSpheres) const;
+    bool CalculateContactResult(b2Contact* c, b2ContactResult* contacts = nullptr, b2InscribedSpheres* inscribedSpheres = nullptr) const;
+
+    void CalculateDistanceResult(b2Contact* c, b2Manifold* worldManifold) const;
+
+    void CalculateDistanceResult(b2Contact* c, b2ContactResult* contacts) const;
 
     b2BlockAllocator m_blockAllocator;
     b2StackAllocator m_stackAllocator;
@@ -300,6 +313,16 @@ B2_FORCE_INLINE void b2BVHManager::ShiftOrigin(const b2Vec2& newOrigin)
     }
 
     m_broadPhase->ShiftOrigin(newOrigin);
+}
+
+B2_FORCE_INLINE void b2BVHManager::setContactDistanceThreshold(b2Scalar contact_distance)
+{
+    m_broadPhase->setContactDistanceThreshold(contact_distance);
+}
+
+B2_FORCE_INLINE b2Scalar b2BVHManager::getContactDistanceThreshold() const
+{
+    return m_broadPhase->getContactDistanceThreshold();
 }
 
 #endif

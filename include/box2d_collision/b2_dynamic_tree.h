@@ -118,6 +118,11 @@ public:
     template <typename T>
     void Query(T* callback, const b2DynamicTree* tree) const;
 
+    /// Query an AABB for distance proxies. The callback class
+    /// is called for each proxy that overlaps the supplied AABB.
+    template <typename T>
+    void QueryDistance(T* callback, const b2AABB& aabb) const;
+
     /// Ray-cast against the proxies in the tree. This relies on the callback
     /// to perform a exact ray-cast in the case were the proxy contains a shape.
     /// The callback also performs the any collision filtering. This has performance
@@ -316,6 +321,35 @@ B2_FORCE_INLINE void b2DynamicTree::Query(T* callback, const b2DynamicTree* tree
                 stack.emplace(node1->child1, node2->child2);
                 stack.emplace(node1->child2, node2->child1);
                 stack.emplace(node1->child2, node2->child2);
+            }
+        }
+    }
+}
+
+template <typename T>
+B2_FORCE_INLINE void b2DynamicTree::QueryDistance(T* callback, const b2AABB& aabb) const
+{
+    std::stack<int32> stack;
+    stack.push(m_root);
+    while (!stack.empty())
+    {
+        int32 nodeId = stack.top();
+        stack.pop();
+        if (nodeId == b2_nullNode)
+            continue;
+
+        const b2TreeNode* node = m_nodes + nodeId;
+        if (b2TestOverlap(node->aabb, aabb))
+        {
+            if (node->IsLeaf())
+            {
+                if (!callback->QueryCallbackDistance(nodeId))
+                    return;
+            }
+            else
+            {
+                stack.push(node->child1);
+                stack.push(node->child2);
             }
         }
     }

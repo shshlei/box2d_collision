@@ -105,8 +105,18 @@ B2_FORCE_INLINE void b2DynamicTree::FreeNode(int32 nodeId)
 // Create a proxy in the tree as a leaf node. We return the index
 // of the node instead of a pointer so that we can grow
 // the node pool.
-int32 b2DynamicTree::CreateProxy(const b2AABB& aabb, void* userData, bool extend)
+int32 b2DynamicTree::CreateProxy(const b2AABB& aabb_, void* userData, bool extend)
 {
+    b2AABB aabb;
+    aabb.lowerBound = aabb_.lowerBound;
+    aabb.upperBound = aabb_.upperBound;
+    if (m_contact_distance > b2Scalar(0.0))
+    {
+        b2Vec2 r(m_contact_distance, m_contact_distance);
+        aabb.lowerBound = aabb.lowerBound - r;
+        aabb.upperBound = aabb.upperBound + r;
+    }
+
     int32 proxyId = AllocateNode();
 
     if (extend)
@@ -174,10 +184,17 @@ void b2DynamicTree::DestroyProxy(int32 proxyId)
     FreeNode(proxyId);
 }
 
-bool b2DynamicTree::MoveProxy(int32 proxyId, const b2AABB& aabb, const b2Vec2& displacement)
+bool b2DynamicTree::MoveProxy(int32 proxyId, const b2AABB& aabb_, const b2Vec2& displacement)
 {
-//    b2Assert(0 <= proxyId && proxyId < m_nodeCapacity);
-//    b2Assert(m_nodes[proxyId].IsLeaf());
+    b2AABB aabb;
+    aabb.lowerBound = aabb_.lowerBound;
+    aabb.upperBound = aabb_.upperBound;
+    if (m_contact_distance > b2Scalar(0.0))
+    {
+        b2Vec2 r(m_contact_distance, m_contact_distance);
+        aabb.lowerBound = aabb.lowerBound - r;
+        aabb.upperBound = aabb.upperBound + r;
+    }
 
     // Extend AABB
     b2AABB fatAABB;
@@ -227,10 +244,17 @@ bool b2DynamicTree::MoveProxy(int32 proxyId, const b2AABB& aabb, const b2Vec2& d
     return true;
 }
 
-bool b2DynamicTree::UpdateProxy(int32 proxyId, const b2AABB& aabb)
+bool b2DynamicTree::UpdateProxy(int32 proxyId, const b2AABB& aabb_)
 {
-//    b2Assert(0 <= proxyId && proxyId < m_nodeCapacity);
-//    b2Assert(m_nodes[proxyId].IsLeaf());
+    b2AABB aabb;
+    aabb.lowerBound = aabb_.lowerBound;
+    aabb.upperBound = aabb_.upperBound;
+    if (m_contact_distance > b2Scalar(0.0))
+    {
+        b2Vec2 r(m_contact_distance, m_contact_distance);
+        aabb.lowerBound = aabb.lowerBound - r;
+        aabb.upperBound = aabb.upperBound + r;
+    }
 
     const b2AABB& treeAABB = m_nodes[proxyId].aabb;
     if (treeAABB.Contains(aabb))

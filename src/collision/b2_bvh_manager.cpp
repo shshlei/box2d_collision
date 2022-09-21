@@ -700,3 +700,120 @@ void b2BVHManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
 
     ++m_contactCount;
 }
+
+b2Scalar b2BVHManager::DistanceTest(b2Manifold* worldManifold)
+{
+    b2Scalar distance = b2_maxFloat;
+    m_broadPhase->UpdateDistancePairs(this);
+    while (m_contactList)
+    {
+        b2Manifold temp;
+        CalculateDistanceResult(m_contactList, &temp);
+        if (temp.separation < distance)
+        {
+            distance = temp.separation;
+            if (worldManifold)
+                *worldManifold = temp;
+        }
+        DestroyContact(m_contactList);
+    }
+
+    return distance;
+}
+
+b2Scalar b2BVHManager::DistanceTest(b2ContactResult* contacts)
+{
+    b2Scalar distance = b2_maxFloat;
+    m_broadPhase->UpdateDistancePairs(this);
+    while (m_contactList)
+    {
+        b2ContactResult temp;
+        CalculateDistanceResult(m_contactList, &temp);
+        if (temp.separation < distance)
+        {
+            distance = temp.separation;
+            if (contacts)
+                *contacts = temp;
+        }
+        DestroyContact(m_contactList);
+    }
+
+    return distance;
+}
+
+void b2BVHManager::CalculateDistanceResult(b2Contact* c, b2Manifold* worldManifold) const
+{
+    b2Fixture* fixtureA = c->GetFixtureA();
+    b2Fixture* fixtureB = c->GetFixtureB();
+    b2Body* bodyA = fixtureA->GetBody();
+    b2Body* bodyB = fixtureB->GetBody();
+    const b2Transform& xfA = bodyA->GetTransform();
+    const b2Transform& xfB = bodyB->GetTransform();
+    c->Evaluate(worldManifold, xfA, xfB);
+}
+
+void b2BVHManager::CalculateDistanceResult(b2Contact* c, b2ContactResult* contacts) const
+{
+    b2Fixture* fixtureA = c->GetFixtureA();
+    b2Fixture* fixtureB = c->GetFixtureB();
+    b2Body* bodyA = fixtureA->GetBody();
+    b2Body* bodyB = fixtureB->GetBody();
+    const b2Transform& xfA = bodyA->GetTransform();
+    const b2Transform& xfB = bodyB->GetTransform();
+    b2Manifold worldManifold;
+    c->Evaluate(&worldManifold, xfA, xfB);
+
+    contacts->names[0] = bodyA->GetName();
+    contacts->names[1] = bodyB->GetName();
+    contacts->shape_id[0] = fixtureA->GetUserData().pointer;
+    contacts->shape_id[1] = fixtureB->GetUserData().pointer;
+    contacts->transforms[0] = xfA;
+    contacts->transforms[1] = xfB;
+    contacts->normal = worldManifold.normal;
+    contacts->separation = worldManifold.separation;
+    contacts->points[0] = worldManifold.point - worldManifold.separation * worldManifold.normal;
+    contacts->points[1] = worldManifold.point;
+    contacts->local_points[0] = b2MulT(xfA.q, contacts->points[0] - xfA.p);
+    contacts->local_points[1] = b2MulT(xfB.q, contacts->points[1] - xfB.p);
+}
+
+void b2BVHManager::AddPairDistance(void* proxyUserDataA, void* proxyUserDataB)
+{
+    b2FixtureProxy* proxyA = (b2FixtureProxy*)proxyUserDataA;
+    b2FixtureProxy* proxyB = (b2FixtureProxy*)proxyUserDataB;
+
+    b2Fixture* fixtureA = proxyA->fixture;
+    b2Fixture* fixtureB = proxyB->fixture;
+
+    b2Body* bodyA = fixtureA->GetBody();
+    b2Body* bodyB = fixtureB->GetBody();
+
+    // Are the fixtures on the same body?
+    if (bodyA == bodyB)
+        return;
+
+    if (!bodyA->IsEnabled() || !bodyB->IsEnabled())
+        return;
+
+    // Does a joint override collision? Is at least one body dynamic?
+    if (!bodyB->ShouldCollide(bodyA))
+        return;
+
+    // Check user filtering.
+    if (m_contactFilter && !m_contactFilter->ShouldCollide(fixtureA, fixtureB))
+        return;
+
+    // Call the factory.
+    b2Contact* c = b2Contact::Create(fixtureA, fixtureB, &m_blockAllocator);
+    if (!c)
+        return;
+
+    // Insert into the world.
+    c->m_prev = nullptr;
+    c->m_next = m_contactList;
+    if (m_contactList != nullptr)
+        m_contactList->m_prev = c;
+    m_contactList = c;
+
+    ++m_contactCount;
+}
