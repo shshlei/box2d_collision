@@ -35,6 +35,13 @@ void b2InscribedSpheres::Initialize(const b2ContactResult* manifold, const b2Sha
         center1 = xf1.p + b2Mul(xf1.q, local_center1);
     if (has_sphere2 = shape2->InscribedSphereAtPoint(b2MulT(xf2.q, p1 - xf2.p), manifold->local_points[1], b2MulT(xf2.q, -normal), local_center2, radius2))
         center2 = xf2.p + b2Mul(xf2.q, local_center2);
+    if (has_sphere1 && has_sphere2)
+    {
+        if (radius1 >= b2Scalar(5.0) * radius2)
+            has_sphere2 = false;
+        if (radius2 >= b2Scalar(5.0) * radius1)
+            has_sphere1 = false;
+    }
 }
 
 void b2InscribedSpheres::Initialize(const b2Manifold* manifold, const b2Shape *shape1, const b2Transform& xf1, const b2Shape *shape2, const b2Transform& xf2)
@@ -46,6 +53,13 @@ void b2InscribedSpheres::Initialize(const b2Manifold* manifold, const b2Shape *s
         center1 = xf1.p + b2Mul(xf1.q, local_center1);
     if (has_sphere2 = shape2->InscribedSphereAtPoint(b2MulT(xf2.q, p1 - xf2.p), b2MulT(xf2.q, p2 - xf2.p), b2MulT(xf2.q, -normal), local_center2, radius2))
         center2 = xf2.p + b2Mul(xf2.q, local_center2);
+    if (has_sphere1 && has_sphere2)
+    {
+        if (radius1 >= b2Scalar(5.0) * radius2)
+            has_sphere2 = false;
+        if (radius2 >= b2Scalar(5.0) * radius1)
+            has_sphere1 = false;
+    }
 }
 
 // From Real-time Collision Detection, p179.

@@ -341,8 +341,13 @@ bool b2PolygonShape::InscribedSphereAtPoint(const b2Vec2& inp_, const b2Vec2& bd
         {
             int32 bi = 0;
             b2Scalar bis = b2_maxFloat;
+            int v1 = bestIndex, v2 = v1 + 1;
+            if (v2 == m_count)
+                v2 = 0;
             for (int32 i = 0; i < m_count; ++i)
             {
+                if (i == v1 || i == v2)
+                    continue;
                 b2Scalar dot = b2Dot(m_normals[bestIndex], m_vertices[i] - m_vertices[bestIndex]);
                 if (dot < bis)
                 {

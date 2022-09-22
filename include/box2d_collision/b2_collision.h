@@ -86,17 +86,17 @@ struct B2_API b2RayCastOutput
 /// Compute the collision manifold between two circles.
 B2_API bool b2CollideCircles(b2Manifold* manifold,
         const b2CircleShape* circleA, const b2Transform& xfA,
-        const b2CircleShape* circleB, const b2Transform& xfB);
+        const b2CircleShape* circleB, const b2Transform& xfB, bool separationStop = true);
 
 /// Compute the collision manifold between a polygon and a circle.
 B2_API bool b2CollidePolygonAndCircle(b2Manifold* manifold,
         const b2PolygonShape* polygonA, const b2Transform& xfA,
-        const b2CircleShape* circleB, const b2Transform& xfB);
+        const b2CircleShape* circleB, const b2Transform& xfB, bool separationStop = true);
 
 /// Compute the collision manifold between two polygons.
 B2_API bool b2CollidePolygons(b2Manifold* manifold,
         const b2PolygonShape* polygonA, const b2Transform& xfA,
-        const b2PolygonShape* polygonB, const b2Transform& xfB);
+        const b2PolygonShape* polygonB, const b2Transform& xfB, bool separationStop = true);
 
 /// Determine if two generic shapes overlap.
 B2_API bool b2TestOverlap(const b2Shape* shapeA, const b2Shape* shapeB, const b2Transform& xfA, const b2Transform& xfB);

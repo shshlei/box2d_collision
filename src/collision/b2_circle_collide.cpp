@@ -26,7 +26,7 @@
 
 bool b2CollideCircles(b2Manifold* manifold,
         const b2CircleShape* circleA, const b2Transform& xfA,
-        const b2CircleShape* circleB, const b2Transform& xfB)
+        const b2CircleShape* circleB, const b2Transform& xfB, bool separationStop)
 {
     b2Vec2 pA = b2Mul(xfA, circleA->m_p);
     b2Vec2 pB = b2Mul(xfB, circleB->m_p);
@@ -35,6 +35,9 @@ bool b2CollideCircles(b2Manifold* manifold,
     b2Scalar distSqr = b2Dot(d, d);
     b2Scalar rA = circleA->m_radius, rB = circleB->m_radius;
     b2Scalar radius = rA + rB;
+    bool collision = distSqr <= radius * radius;
+    if (!collision && separationStop)
+        return collision;
     if (manifold)
     {
         manifold->normal.Set(b2Scalar(1.0), b2Scalar(0.0));
@@ -46,14 +49,12 @@ bool b2CollideCircles(b2Manifold* manifold,
         manifold->separation = b2Sqrt(distSqr) - radius;
         manifold->point = pB - rB * manifold->normal;
     }
-    if (distSqr > radius * radius)
-        return false;
-    return true;
+    return collision;
 }
 
 bool b2CollidePolygonAndCircle(b2Manifold* manifold,
         const b2PolygonShape* polygonA, const b2Transform& xfA,
-        const b2CircleShape* circleB, const b2Transform& xfB)
+        const b2CircleShape* circleB, const b2Transform& xfB, bool separationStop)
 {
     bool collision = false;
     // Compute circle position in the frame of the polygon.
@@ -71,7 +72,7 @@ bool b2CollidePolygonAndCircle(b2Manifold* manifold,
     for (int32 i = 0; i < vertexCount; ++i)
     {
         b2Scalar s = b2Dot(normals[i], cLocal - vertices[i]);
-        if (!manifold && s > radius) // Early out.
+        if ((!manifold || separationStop) && s > radius) // Early out.
             return false;
         if (s > separation)
         {
@@ -105,6 +106,8 @@ bool b2CollidePolygonAndCircle(b2Manifold* manifold,
         double d = b2DistanceSquared(cLocal, v1);
         if (d <= radius * radius)
             collision = true;
+        else if (separationStop)
+            return collision;
         if (manifold)
         {
             manifold->separation = b2Sqrt(d) - radius;
@@ -118,6 +121,8 @@ bool b2CollidePolygonAndCircle(b2Manifold* manifold,
         double d = b2DistanceSquared(cLocal, v2);
         if (d <= radius * radius)
             collision = true;
+        else if (separationStop)
+            return collision;
         if (manifold)
         {
             manifold->separation = b2Sqrt(d) - radius;
@@ -130,6 +135,8 @@ bool b2CollidePolygonAndCircle(b2Manifold* manifold,
     {
         if (separation <= radius)
             collision = true;
+        else if (separationStop)
+            return collision;
         if (manifold)
         {
             manifold->separation = separation - radius;

@@ -81,7 +81,8 @@ public:
     const b2Fixture* GetFixtureB() const;
 
     /// Evaluate this contact with your own manifold and transforms.
-    virtual bool Evaluate(b2Manifold* manifold, const b2Transform& xfA, const b2Transform& xfB) = 0;
+    // separationStop flag indicates that the computation stops immediately if the objects are separating
+    virtual bool Evaluate(b2Manifold* manifold, const b2Transform& xfA, const b2Transform& xfB, bool separationStop = true) = 0;
 
 protected:
 

@@ -83,20 +83,20 @@ static b2Scalar b2FindMaxSeparation(int32* edgeIndex, b2Vec2 *point,
 // The normal points from 1 to 2
 bool b2CollidePolygons(b2Manifold* manifold,
         const b2PolygonShape* polyA, const b2Transform& xfA,
-        const b2PolygonShape* polyB, const b2Transform& xfB)
+        const b2PolygonShape* polyB, const b2Transform& xfB, bool separationStop)
 {
     b2Scalar radius = polyA->m_radius + polyB->m_radius;
     bool collision = false;
     int32 edgeA = 0;
     b2Vec2 pointB;
     b2Scalar separationA = b2FindMaxSeparation(&edgeA, &pointB, polyA, xfA, polyB, xfB, manifold, radius, collision);
-    if (!collision && !manifold)
+    if (!collision && (!manifold || separationStop))
         return false;
 
     int32 edgeB = 0;
     b2Vec2 pointA;
     b2Scalar separationB = b2FindMaxSeparation(&edgeB, &pointA, polyB, xfB, polyA, xfA, manifold, radius, collision);
-    if (!collision && !manifold)
+    if (!collision && (!manifold || separationStop))
         return false;
 
     const b2PolygonShape* poly1 = polyA;
@@ -105,7 +105,7 @@ bool b2CollidePolygons(b2Manifold* manifold,
     b2Scalar separation = separationA;
     b2Vec2 c = b2Mul(xfB, pointB);
     bool flip = false;
-    if (collision ? separationB > separationA : separationB < separationA)
+    if (separationB > b2Scalar(0.0) ? (separationA < b2Scalar(0.0) || separationB < separationA) : separationB > separationA)
     {
         poly1 = polyB;
         xf1 = xfB;
@@ -143,6 +143,8 @@ bool b2CollidePolygons(b2Manifold* manifold,
             double d = b2DistanceSquared(cLocal, v1);
             if (d <= radius * radius)
                 collision = true;
+            else if (separationStop)
+                return collision;
             if (manifold)
             {
                 manifold->separation = b2Sqrt(d) - radius;
@@ -155,6 +157,8 @@ bool b2CollidePolygons(b2Manifold* manifold,
             double d = b2DistanceSquared(cLocal, v2);
             if (d <= radius * radius)
                 collision = true;
+            else if (separationStop)
+                return collision;
             if (manifold)
             {
                 manifold->separation = b2Sqrt(d) - radius;
@@ -166,6 +170,8 @@ bool b2CollidePolygons(b2Manifold* manifold,
         {
             if (separation <= radius)
                 collision = true;
+            else if (separationStop)
+                return collision;
             if (manifold)
             {
                 manifold->separation = separation - radius;

@@ -749,7 +749,7 @@ void b2BVHManager::CalculateDistanceResult(b2Contact* c, b2Manifold* worldManifo
     b2Body* bodyB = fixtureB->GetBody();
     const b2Transform& xfA = bodyA->GetTransform();
     const b2Transform& xfB = bodyB->GetTransform();
-    c->Evaluate(worldManifold, xfA, xfB);
+    c->Evaluate(worldManifold, xfA, xfB, false);
 }
 
 void b2BVHManager::CalculateDistanceResult(b2Contact* c, b2ContactResult* contacts) const
@@ -761,7 +761,7 @@ void b2BVHManager::CalculateDistanceResult(b2Contact* c, b2ContactResult* contac
     const b2Transform& xfA = bodyA->GetTransform();
     const b2Transform& xfB = bodyB->GetTransform();
     b2Manifold worldManifold;
-    c->Evaluate(&worldManifold, xfA, xfB);
+    c->Evaluate(&worldManifold, xfA, xfB, false);
 
     contacts->names[0] = bodyA->GetName();
     contacts->names[1] = bodyB->GetName();
