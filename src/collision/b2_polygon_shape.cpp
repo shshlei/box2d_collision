@@ -291,71 +291,11 @@ bool b2PolygonShape::Validate() const
     return true;
 }
 
-/*
-bool b2PolygonShape::InscribedSphereAtPoint(const b2Vec2& inp, const b2Vec2& bdp, const b2Vec2& normal, b2Vec2& local_center, b2Scalar &radius) const
-{
-    b2Scalar eps = b2Scalar(1.e4) * b2_epsilon;
-    b2Scalar s(0.0), maxS = b2Distance(inp, bdp) - eps;
-    b2Scalar maxSeparation = b2_maxFloat, tempd;
-    b2Vec2 temp;
-    int32 count = 0;
-    int32 bestIndex = 0;
-    while (s < maxS)
-    {
-        local_center = inp + s * normal;
-        if (s > b2Scalar(0.0) && maxSeparation >= -eps && b2Dot(m_normals[bestIndex], local_center - m_vertices[bestIndex]) >= -eps)
-        {
-            s = (s + maxS) / b2Scalar(2.0);
-            continue;
-        }
-        maxSeparation = -b2_maxFloat;
-        for (int32 i = 0; i < m_count && maxSeparation < -eps; ++i)
-        {
-            b2Scalar dot = b2Dot(m_normals[i], local_center - m_vertices[i]);
-            if (dot > maxSeparation)
-            {
-                maxSeparation = dot;
-                bestIndex = i;
-            }
-        }
-        if (maxSeparation < -eps)
-        {
-            if (s == b2Scalar(0.0) && b2Dot(m_normals[bestIndex], normal) >= -eps)
-                break;
-            count++;
-            if (count == 2)
-            {
-                if (maxSeparation > tempd)
-                {
-                    maxSeparation = tempd;
-                    local_center = temp; 
-                }
-                break;
-            }
-            tempd = maxSeparation;
-            temp = local_center;
-        }
-        else
-        {
-            if (b2Dot(m_normals[bestIndex], bdp - m_vertices[bestIndex]) >= -eps)
-                break;
-        }
-        s = (s + maxS) / b2Scalar(2.0);
-    }
-    if (maxSeparation < -eps)
-    {
-        radius = -maxSeparation;
-        return true;
-    }
-    return false;
-}
-*/
-
 bool b2PolygonShape::InscribedSphereAtPoint(const b2Vec2& inp_, const b2Vec2& bdp_, const b2Vec2& normal_, b2Vec2& local_center, b2Scalar &radius) const
 {
     b2Scalar eps = b2Scalar(1.e4) * b2_epsilon;
     b2Scalar maxSeparation = b2_maxFloat, tempd;
-    b2Vec2 temp;
+    b2Vec2 temp; // the first inner point
     int32 count = 0;
     int32 bestIndex = 0;
     b2Vec2 inp = inp_;
@@ -365,12 +305,12 @@ bool b2PolygonShape::InscribedSphereAtPoint(const b2Vec2& inp_, const b2Vec2& bd
     while (s < maxS)
     {
         local_center = inp + s * normal;
-        if (s > b2Scalar(0.0) && maxSeparation >= -eps && b2Dot(m_normals[bestIndex], local_center - m_vertices[bestIndex]) >= -eps)
+        if (s > b2Scalar(0.0) && maxSeparation >= -eps && b2Dot(m_normals[bestIndex], local_center - m_vertices[bestIndex]) >= -eps) // the point is still outside the edge normal
         {
             s = (s + maxS) / b2Scalar(2.0);
             continue;
         }
-        maxSeparation = -b2_maxFloat;
+        maxSeparation = -b2_maxFloat; // test the local_center if in the polygon
         for (int32 i = 0; i < m_count && maxSeparation < -eps; ++i)
         {
             b2Scalar dot = b2Dot(m_normals[i], local_center - m_vertices[i]);
@@ -396,12 +336,9 @@ bool b2PolygonShape::InscribedSphereAtPoint(const b2Vec2& inp_, const b2Vec2& bd
             }
             tempd = maxSeparation;
             temp = local_center;
-//            break; // todo
         }
-        else
+        else if (count ==0)// find the deepest penetration point on the normal m_normals[bestIndex]
         {
-//            if (b2Dot(m_normals[bestIndex], bdp - m_vertices[bestIndex]) >= -eps) // todo
-//                break;
             int32 bi = 0;
             b2Scalar bis = b2_maxFloat;
             for (int32 i = 0; i < m_count; ++i)
