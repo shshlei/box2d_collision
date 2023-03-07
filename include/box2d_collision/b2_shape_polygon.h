@@ -22,7 +22,6 @@
 #ifndef B2_POLYGON_SHAPE_H
 #define B2_POLYGON_SHAPE_H
 
-#include "b2_api.h"
 #include "b2_shape.h"
 
 /// A solid convex polygon. It is assumed that the interior of the polygon is to
@@ -34,42 +33,25 @@ class B2_API b2PolygonShape : public b2Shape
 public:
     b2PolygonShape();
 
-    /// Implement b2Shape.
-    b2Shape* Clone(b2BlockAllocator* allocator) const override;
-
-    void SetLocalTransform(const b2Transform& xf) override;
-
     /// Create a convex hull from the given array of local points.
     /// The count must be in the range [3, b2_maxPolygonVertices].
     /// @warning the points may be re-ordered, even if they form a convex polygon
     /// @warning collinear points are handled but not removed. Collinear points
     /// may lead to poor stacking behavior.
-    void Set(const b2Vec2* points, int32 count);
+    void Set(const b2Vec2* points, int count);
 
-    /// Build vertices to represent an axis-aligned box centered on the local origin.
-    /// @param hx the half-width.
-    /// @param hy the half-height.
-    void SetAsBox(b2Scalar hx, b2Scalar hy);
-
-    /// Build vertices to represent an oriented box.
-    /// @param hx the half-width.
-    /// @param hy the half-height.
-    /// @param center the center of the box in local coordinates.
-    /// @param angle the rotation of the box in local coordinates.
-    void SetAsBox(b2Scalar hx, b2Scalar hy, const b2Vec2& center, b2Scalar angle);
+    /// Implement b2Shape.
+    b2Shape* Clone(b2BlockAllocator* allocator) const override;
 
     /// @see b2Shape::TestPoint
     bool TestPoint(const b2Transform& transform, const b2Vec2& p) const override;
 
-    /// Implement b2Shape.
-    /// @note because the polygon is solid, rays that start inside do not hit because the normal is
-    /// not defined.
-    bool RayCast(b2RayCastOutput* output, const b2RayCastInput& input, const b2Transform& transform) const override;
-
     /// @see b2Shape::ComputeAABB
     void ComputeAABB(b2AABB* aabb, const b2Transform& transform) const override;
 
-    bool InscribedSphereAtPoint(const b2Vec2& inp, const b2Vec2& bdp, const b2Vec2& normal, b2Vec2& local_center, b2Scalar &radius) const override;
+    bool InscribedSphereAtPoint(const b2Vec2& inp, const b2Vec2& bdp, const b2Vec2& normal, b2Vec2& local_center, b2Scalar &radius) const override; // todo m_radius
+
+    b2Vec2 SupportPoint(const b2Vec2& dir) const override; // todo m_radius
 
     b2Scalar ComputeArea() const;
 
@@ -80,7 +62,9 @@ public:
     b2Vec2 m_centroid;
     b2Vec2 m_vertices[b2_maxPolygonVertices];
     b2Vec2 m_normals[b2_maxPolygonVertices];
-    int32 m_count;
+    int m_count;
+
+    b2Scalar m_radius{0.0};
 };
 
 B2_FORCE_INLINE b2PolygonShape::b2PolygonShape()
@@ -90,14 +74,4 @@ B2_FORCE_INLINE b2PolygonShape::b2PolygonShape()
     m_centroid.SetZero();
 }
 
-B2_FORCE_INLINE void b2PolygonShape::SetLocalTransform(const b2Transform& xf)
-{
-    m_centroid = b2Mul(xf, m_centroid);
-    // Transform vertices and normals.
-    for (int32 i = 0; i < m_count; ++i)
-    {
-        m_vertices[i] = b2Mul(xf, m_vertices[i]);
-        m_normals[i] = b2Mul(xf.q, m_normals[i]);
-    }
-}
 #endif

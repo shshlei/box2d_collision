@@ -21,25 +21,24 @@
 // SOFTWARE.
 
 #include "box2d_collision/b2_collision.h"
-#include "box2d_collision/b2_polygon_shape.h"
 
 // Find the max separation between poly1 and poly2 using edge normals from poly1.
-static b2Scalar b2FindMaxSeparation(int32* edgeIndex, b2Vec2 *point,
+static b2Scalar b2FindMaxSeparation(int* edgeIndex, b2Vec2 *point,
         const b2PolygonShape* poly1, const b2Transform& xf1,
         const b2PolygonShape* poly2, const b2Transform& xf2,
-        const b2Manifold* manifold, b2Scalar tol, bool &collision)
+        bool separationStop, b2Scalar tol, bool &collision)
 {
     collision = true;
-    int32 count1 = poly1->m_count;
-    int32 count2 = poly2->m_count;
+    int count1 = poly1->m_count;
+    int count2 = poly2->m_count;
     const b2Vec2* n1s = poly1->m_normals;
     const b2Vec2* v1s = poly1->m_vertices;
     const b2Vec2* v2s = poly2->m_vertices;
     b2Transform xf = b2MulT(xf2, xf1);
 
-    int32 bestIndex = 0;
+    int bestIndex = 0;
     b2Scalar maxSeparation = -b2_maxFloat;
-    for (int32 i = 0; i < count1; ++i)
+    for (int i = 0; i < count1; ++i)
     {
         // Get poly1 normal in frame2.
         b2Vec2 n = b2Mul(xf.q, n1s[i]);
@@ -48,7 +47,7 @@ static b2Scalar b2FindMaxSeparation(int32* edgeIndex, b2Vec2 *point,
         // Find deepest point for normal i.
         b2Scalar si = b2_maxFloat;
         b2Vec2 temp;
-        for (int32 j = 0; j < count2; ++j)
+        for (int j = 0; j < count2; ++j)
         {
             b2Scalar sij = b2Dot(n, v2s[j] - v1);
             if (sij < si)
@@ -66,7 +65,7 @@ static b2Scalar b2FindMaxSeparation(int32* edgeIndex, b2Vec2 *point,
             if (si > tol)
             {
                 collision = false;
-                if (!manifold)
+                if (separationStop)
                     break;
             }
         }
@@ -87,21 +86,21 @@ bool b2CollidePolygons(b2Manifold* manifold,
 {
     b2Scalar radius = polyA->m_radius + polyB->m_radius;
     bool collision = false;
-    int32 edgeA = 0;
+    int edgeA = 0;
     b2Vec2 pointB;
-    b2Scalar separationA = b2FindMaxSeparation(&edgeA, &pointB, polyA, xfA, polyB, xfB, manifold, radius, collision);
+    b2Scalar separationA = b2FindMaxSeparation(&edgeA, &pointB, polyA, xfA, polyB, xfB, (!manifold || separationStop), radius, collision);
     if (!collision && (!manifold || separationStop))
         return false;
 
-    int32 edgeB = 0;
+    int edgeB = 0;
     b2Vec2 pointA;
-    b2Scalar separationB = b2FindMaxSeparation(&edgeB, &pointA, polyB, xfB, polyA, xfA, manifold, radius, collision);
+    b2Scalar separationB = b2FindMaxSeparation(&edgeB, &pointA, polyB, xfB, polyA, xfA, (!manifold || separationStop), radius, collision);
     if (!collision && (!manifold || separationStop))
         return false;
 
     const b2PolygonShape* poly1 = polyA;
     b2Transform xf1 = xfA;
-    int32 edge1 = edgeA;
+    int edge1 = edgeA;
     b2Scalar separation = separationA;
     b2Vec2 c = b2Mul(xfB, pointB);
     bool flip = false;
@@ -131,8 +130,8 @@ bool b2CollidePolygons(b2Manifold* manifold,
     {
         b2Vec2 cLocal = b2MulT(xf1, c);
         // Vertices that subtend the incident face.
-        int32 vertIndex1 = edge1;
-        int32 vertIndex2 = vertIndex1 + 1 < poly1->m_count ? vertIndex1 + 1 : 0;
+        int vertIndex1 = edge1;
+        int vertIndex2 = vertIndex1 + 1 < poly1->m_count ? vertIndex1 + 1 : 0;
         b2Vec2 v1 = poly1->m_vertices[vertIndex1];
         b2Vec2 v2 = poly1->m_vertices[vertIndex2];
         // Compute barycentric coordinates

@@ -20,50 +20,64 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef B2_CIRCLE_SHAPE_H
-#define B2_CIRCLE_SHAPE_H
+#ifndef B2_ELLIPSE_SHAPE_H
+#define B2_ELLIPSE_SHAPE_H
 
-#include "b2_api.h"
 #include "b2_shape.h"
 
-/// A solid circle shape
-class B2_API b2CircleShape : public b2Shape
+/// A solid ellipse shape
+class B2_API b2EllipseShape : public b2Shape
 {
 public:
-    b2CircleShape();
+    b2EllipseShape();
+
+    b2EllipseShape(b2Scalar a, b2Scalar b);
+
+    void SetHalfSides(b2Scalar a, b2Scalar b);
+
+    const b2Vec2 GetHalfSides() const;
 
     /// Implement b2Shape.
     b2Shape* Clone(b2BlockAllocator* allocator) const override;
 
-    void SetLocalTransform(const b2Transform& xf) override;
-
     /// Implement b2Shape.
     bool TestPoint(const b2Transform& transform, const b2Vec2& p) const override;
-
-    /// Implement b2Shape.
-    /// @note because the circle is solid, rays that start inside do not hit because the normal is
-    /// not defined.
-    bool RayCast(b2RayCastOutput* output, const b2RayCastInput& input, const b2Transform& transform) const override;
 
     /// @see b2Shape::ComputeAABB
     void ComputeAABB(b2AABB* aabb, const b2Transform& transform) const override;
 
     bool InscribedSphereAtPoint(const b2Vec2& inp, const b2Vec2& bdp, const b2Vec2& normal, b2Vec2& local_center, b2Scalar &radius) const override;
 
-    /// Position
-    b2Vec2 m_p;
+    b2Vec2 SupportPoint(const b2Vec2& dir) const override;
+
+private:
+    b2Scalar m_a, m_b;
+    b2Scalar m_a2, m_b2;
 };
 
-B2_FORCE_INLINE b2CircleShape::b2CircleShape()
+B2_FORCE_INLINE b2EllipseShape::b2EllipseShape()
 {
-    m_type = e_circle;
-    m_radius = b2Scalar(0.0);
-    m_p.SetZero();
+    m_type = e_ellipse;
+    m_a = m_b = b2Scalar(0.0);
+    m_a2 = m_b2 = b2Scalar(0.0);
 }
 
-B2_FORCE_INLINE void b2CircleShape::SetLocalTransform(const b2Transform& xf)
+B2_FORCE_INLINE b2EllipseShape::b2EllipseShape(b2Scalar a, b2Scalar b)
 {
-    m_p = b2Mul(xf, m_p);
+    m_type = e_ellipse;
+    m_a = a; m_b = b;
+    m_a2 = a * a; m_b2 = b * b;
+}
+
+B2_FORCE_INLINE void b2EllipseShape::SetHalfSides(b2Scalar a, b2Scalar b)
+{
+    m_a = a; m_b = b;
+    m_a2 = a * a; m_b2 = b * b;
+}
+
+B2_FORCE_INLINE const b2Vec2 b2EllipseShape::GetHalfSides() const
+{
+    return b2Vec2(m_a, m_b);
 }
 
 #endif

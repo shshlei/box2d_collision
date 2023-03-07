@@ -24,7 +24,6 @@
 #define B2_CALLBACKS_H
 
 #include "b2_api.h"
-#include "b2_settings.h"
 
 struct b2Vec2;
 struct b2Transform;
@@ -46,47 +45,36 @@ public:
 };
 
 /// Callback class for AABB queries.
-/// See b2BVHManager::Query
-class B2_API b2QueryCallback
+/// See b2BVHManager::Collide
+class B2_API b2NaiveCallback
 {
 public:
-    virtual ~b2QueryCallback() {}
+    virtual ~b2NaiveCallback() {}
 
     /// Called for each fixture found in the query AABB.
-    /// @return false to terminate the query.
-    virtual bool ReportFixture(b2Fixture* fixture) = 0;
-};
+    /// @return collision.
+    virtual bool ReportCollision(b2Fixture* fixture)
+    {
+        return true;
+    }
 
-class B2_API b2QueryCallback2
-{
-public:
-    virtual ~b2QueryCallback2() {}
+    /// Collision between two fixtures 
+    virtual bool ReportCollision(b2Fixture* fixtureA, b2Fixture* fixtureB)
+    {
+        return true;
+    }
 
-    /// Called for each fixture found in the query AABB.
-    /// @return false to terminate the query.
-    virtual bool ReportFixture(b2Fixture* fixtureA, b2Fixture* fixtureB) = 0;
-};
+    /// @return separation.
+    virtual bool ReportDistance(b2Fixture* fixture, b2Scalar &dist)
+    {
+        return true;
+    }
 
-/// Callback class for ray casts.
-/// See b2BVHManager::RayCast
-class B2_API b2RayCastCallback
-{
-public:
-    virtual ~b2RayCastCallback() {}
-
-    /// Called for each fixture found in the query. You control how the ray cast
-    /// proceeds by returning a float:
-    /// return -1: ignore this fixture and continue
-    /// return 0: terminate the ray cast
-    /// return fraction: clip the ray to this point
-    /// return 1: don't clip the ray and continue
-    /// @param fixture the fixture hit by the ray
-    /// @param point the point of initial intersection
-    /// @param normal the normal vector at the point of intersection
-    /// @param fraction the fraction along the ray at the point of intersection
-    /// @return -1 to filter, 0 to terminate, fraction to clip the ray for
-    /// closest hit, 1 to continue
-    virtual float ReportFixture(b2Fixture* fixture, const b2Vec2& point, const b2Vec2& normal, float fraction) = 0;
+    /// Distance between two fixtures 
+    virtual bool ReportDistance(b2Fixture* fixtureA, b2Fixture* fixtureB, b2Scalar &dist)
+    {
+        return true;
+    }
 };
 
 #endif

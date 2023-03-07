@@ -23,82 +23,74 @@
 #ifndef B2_COMMON_H
 #define B2_COMMON_H
 
+#include "b2_api.h"
 #include "b2_scalar.h"
-#include "b2_settings.h"
 
-#include <stddef.h>
-#include <assert.h>
-#include <float.h>
+#include <stdarg.h>
+#include <stdint.h>
 
 #ifdef B2_DEBUG
-	#define b2DEBUG
+    #define b2DEBUG
 #endif
 
 #define B2_NOT_USED(x) ((void)(x))
 
 #define	b2_maxFloat		B2_INFINITY
 #define	b2_epsilon		B2_EPSILON
+#define	b2_epsilon2		B2_EPSILON * B2_EPSILON
 #define b2_pi			B2_PI
 
-/// @file
-/// Global tuning constants based on meters-kilograms-seconds (MKS) units.
-///
+#define b2_maxPolygonVertices	8
 
-// Collision
+// User data
 
-/// The maximum number of contact points between two convex shapes. Do
-/// not change this value.
-#define b2_maxManifoldPoints	2
-
-/// This is used to fatten AABBs in the dynamic tree. This allows proxies
-/// to move by a small amount without triggering a tree adjustment.
-#define b2_aabbExtensionRatio	b2Scalar(0.1)
-
-/// This is used to fatten AABBs in the dynamic tree. This is used to predict
-/// the future position based on the current displacement.
-/// This is a dimensionless multiplier.
-#define b2_aabbMultiplier		b2Scalar(4.0)
-
-// Dynamics
-
-/// Maximum number of contacts to be handled to solve a TOI impact.
-#define b2_maxTOIContacts			32
-
-/// The maximum angular position correction used when solving constraints. This helps to
-/// prevent overshoot.
-#define b2_maxAngularCorrection		(b2Scalar(8.0) / b2Scalar(180.0) * b2_pi)
-
-/// The maximum linear translation of a body per step. This limit is very large and is used
-/// to prevent numerical problems. You shouldn't need to adjust this. Meters.
-#define b2_maxTranslationSquared	(b2_maxTranslation * b2_maxTranslation)
-
-/// The maximum angular velocity of a body. This limit is very large and is used
-/// to prevent numerical problems. You shouldn't need to adjust this.
-#define b2_maxRotation				(b2Scalar(0.5) * b2_pi)
-#define b2_maxRotationSquared		(b2_maxRotation * b2_maxRotation)
-
-/// This scale factor controls how fast overlap is resolved. Ideally this would be 1 so
-/// that overlap is removed in one time step. However using values close to 1 often lead
-/// to overshoot.
-#define b2_baumgarte				b2Scalar(0.2)
-#define b2_toiBaumgarte				b2Scalar(0.75)
-
-
-/// Dump to a file. Only one dump file allowed at a time.
-void b2OpenDump(const char* fileName);
-void b2Dump(const char* string, ...);
-void b2CloseDump();
-
-/// Version numbering scheme.
-/// See http://en.wikipedia.org/wiki/Software_versioning
-struct b2Version
+/// You can define this to inject whatever data you want in b2Body
+struct B2_API b2BodyUserData
 {
-	int32 major;		///< significant changes
-	int32 minor;		///< incremental changes
-	int32 revision;		///< bug fixes
+    b2BodyUserData()
+    {
+        pointer = 0;
+    }
+
+    /// For legacy compatibility
+    uintptr_t pointer;
 };
 
-/// Current version.
-extern B2_API b2Version b2_version;
+/// You can define this to inject whatever data you want in b2Fixture
+struct B2_API b2FixtureUserData
+{
+    b2FixtureUserData()
+    {
+        pointer = 0;
+    }
+
+    /// For legacy compatibility
+    uintptr_t pointer;
+};
+
+// Memory Allocation
+
+/// Default allocation functions
+B2_API B2_FORCE_INLINE void* b2Alloc_Default(int size)
+{
+    return malloc(size);
+}
+
+B2_API B2_FORCE_INLINE void b2Free_Default(void* mem)
+{
+    free(mem);
+}
+
+/// Implement this function to use your own memory allocator.
+B2_FORCE_INLINE void* b2Alloc(int size)
+{
+    return b2Alloc_Default(size);
+}
+
+/// If you implement b2Alloc, you should also implement this function.
+B2_FORCE_INLINE void b2Free(void* mem)
+{
+    b2Free_Default(mem);
+}
 
 #endif

@@ -21,15 +21,13 @@
 // SOFTWARE.
 
 #include "box2d_collision/b2_collision.h"
-#include "box2d_collision/b2_circle_shape.h"
-#include "box2d_collision/b2_polygon_shape.h"
 
 bool b2CollideCircles(b2Manifold* manifold,
         const b2CircleShape* circleA, const b2Transform& xfA,
         const b2CircleShape* circleB, const b2Transform& xfB, bool separationStop)
 {
-    b2Vec2 pA = b2Mul(xfA, circleA->m_p);
-    b2Vec2 pB = b2Mul(xfB, circleB->m_p);
+    const b2Vec2& pA = xfA.p;
+    const b2Vec2& pB = xfB.p;
 
     b2Vec2 d = pB - pA;
     b2Scalar distSqr = b2Dot(d, d);
@@ -41,35 +39,33 @@ bool b2CollideCircles(b2Manifold* manifold,
     if (manifold)
     {
         manifold->normal.Set(b2Scalar(1.0), b2Scalar(0.0));
-        if (distSqr > b2_epsilon * b2_epsilon)
-        {
-            manifold->normal = d;
-            manifold->normal.Normalize();
-        }
-        manifold->separation = b2Sqrt(distSqr) - radius;
+        b2Scalar l = b2Sqrt(distSqr);
+        if (l > b2_epsilon)
+            manifold->normal = d / l;
+        manifold->separation = l - radius;
         manifold->point = pB - rB * manifold->normal;
     }
     return collision;
 }
 
-bool b2CollidePolygonAndCircle(b2Manifold* manifold,
+bool b2CollidePolygonCircle(b2Manifold* manifold,
         const b2PolygonShape* polygonA, const b2Transform& xfA,
         const b2CircleShape* circleB, const b2Transform& xfB, bool separationStop)
 {
     bool collision = false;
     // Compute circle position in the frame of the polygon.
-    b2Vec2 c = b2Mul(xfB, circleB->m_p);
+    const b2Vec2& c = xfB.p;
     b2Vec2 cLocal = b2MulT(xfA, c);
 
-    // Find the min separating edge.
-    int32 normalIndex = 0;
+    // Find the max separating edge.
+    int normalIndex = 0;
     b2Scalar separation = -b2_maxFloat;
     b2Scalar radius = circleB->m_radius + polygonA->m_radius;
-    int32 vertexCount = polygonA->m_count;
+    int vertexCount = polygonA->m_count;
     const b2Vec2* vertices = polygonA->m_vertices;
     const b2Vec2* normals = polygonA->m_normals;
 
-    for (int32 i = 0; i < vertexCount; ++i)
+    for (int i = 0; i < vertexCount; ++i)
     {
         b2Scalar s = b2Dot(normals[i], cLocal - vertices[i]);
         if ((!manifold || separationStop) && s > radius) // Early out.
@@ -94,16 +90,17 @@ bool b2CollidePolygonAndCircle(b2Manifold* manifold,
     }
 
     // Vertices that subtend the incident face.
-    int32 vertIndex1 = normalIndex;
-    int32 vertIndex2 = vertIndex1 + 1 < vertexCount ? vertIndex1 + 1 : 0;
+    int vertIndex1 = normalIndex;
+    int vertIndex2 = vertIndex1 + 1 < vertexCount ? vertIndex1 + 1 : 0;
     b2Vec2 v1 = vertices[vertIndex1];
     b2Vec2 v2 = vertices[vertIndex2];
     // Compute barycentric coordinates
-    b2Scalar u1 = b2Dot(cLocal - v1, v2 - v1);
-    b2Scalar u2 = b2Dot(cLocal - v2, v1 - v2);
+    b2Vec2 d1 = cLocal - v1, d2 = cLocal - v2;
+    b2Scalar u1 = b2Dot(d1, v2 - v1);
+    b2Scalar u2 = b2Dot(d2, v1 - v2);
     if (u1 <= b2Scalar(0.0))
     {
-        double d = b2DistanceSquared(cLocal, v1);
+        b2Scalar d = d1.LengthSquared();
         if (d <= radius * radius)
             collision = true;
         else if (separationStop)
@@ -111,14 +108,14 @@ bool b2CollidePolygonAndCircle(b2Manifold* manifold,
         if (manifold)
         {
             manifold->separation = b2Sqrt(d) - radius;
-            manifold->normal = b2Mul(xfA.q, cLocal - v1);
+            manifold->normal = b2Mul(xfA.q, d1);
             manifold->normal.Normalize();
             manifold->point = c - manifold->normal * circleB->m_radius;
         }
     }
     else if (u2 <= b2Scalar(0.0))
     {
-        double d = b2DistanceSquared(cLocal, v2);
+        b2Scalar d = d2.LengthSquared();
         if (d <= radius * radius)
             collision = true;
         else if (separationStop)
@@ -126,7 +123,7 @@ bool b2CollidePolygonAndCircle(b2Manifold* manifold,
         if (manifold)
         {
             manifold->separation = b2Sqrt(d) - radius;
-            manifold->normal = b2Mul(xfA.q, cLocal - v2);
+            manifold->normal = b2Mul(xfA.q, d2);
             manifold->normal.Normalize();
             manifold->point = c - manifold->normal * circleB->m_radius;
         }
@@ -144,5 +141,82 @@ bool b2CollidePolygonAndCircle(b2Manifold* manifold,
             manifold->point = c - manifold->normal * circleB->m_radius;
         }
     }
+    return collision;
+}
+
+bool b2NearestPointInBox(const b2Vec2& hsize, const b2Vec2& q, b2Vec2& b)
+{
+    // Clamp the point to the box. If we do *any* clamping we know the center was
+    // outside. If we did *no* clamping, the point is inside the box.
+    bool clamped = false;
+    for (int i = 0; i < 2; ++i)
+    {
+        b(i) = q(i);
+        if (q(i) < -hsize(i))
+        {
+            clamped = true;
+            b(i) = -hsize(i);
+        }
+        else if (q(i) > hsize(i))
+        {
+            clamped = true;
+            b(i) = hsize(i);
+        }
+    }
+    return !clamped;
+}
+
+bool b2CollideRectangleCircle(b2Manifold* manifold,
+        const b2RectangleShape* rectA, const b2Transform& xfA, 
+        const b2CircleShape* circleB, const b2Transform& xfB, bool separationStop)
+{
+    // Find the circle center c in the box's frame.
+    const b2Vec2& c = xfB.p;
+    b2Vec2 cLocal = b2MulT(xfA, c);
+
+    const b2Scalar radius = circleB->m_radius;
+
+    // Find b, the nearest point *inside* the box to the circle center c
+    b2Vec2 b;
+    bool collision = b2NearestPointInBox(rectA->GetHalfSides(), cLocal, b);
+    if (!collision)
+    {
+        b2Vec2 bc = cLocal - b;
+        b2Scalar d = bc.LengthSquared();
+        if (d <= radius * radius)
+            collision = true;
+        else if (separationStop)
+            return collision;
+        if (manifold)
+        {
+            manifold->separation = b2Sqrt(d) - radius;
+            manifold->normal = b2Mul(xfA.q, bc);
+            manifold->normal.Normalize();
+            manifold->point = c - manifold->normal * circleB->m_radius;
+        }
+    }
+    else if (manifold) 
+    {
+        b2Scalar eps = b2Scalar(16.0) * b2_epsilon;
+        b2Scalar min_distance = b2_maxFloat;
+        int min_axis = -1;
+        const b2Vec2& hsize = rectA->GetHalfSides();
+        for (int i = 0; i < 2; ++i)
+        {
+            b2Scalar dist = b(i) >= 0.0 ? hsize(i) - b(i) : b(i) + hsize(i);
+            // To be closer, the face has to be more than epsilon closer.
+            if (dist + eps < min_distance)
+            {
+                min_distance = dist;
+                min_axis = i;
+            }
+        }
+        manifold->normal.SetZero();
+        manifold->normal(min_axis) = b(min_axis) >= 0.0 ? 1.0 : -1.0;
+        manifold->normal = b2Mul(xfA.q, manifold->normal);
+        manifold->separation = -(min_distance + radius);
+        manifold->point = c - manifold->normal * circleB->m_radius;
+    }
+    // We didn't *prove* separation, so we must be in penetration.
     return collision;
 }

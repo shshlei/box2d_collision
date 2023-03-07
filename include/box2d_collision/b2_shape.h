@@ -23,15 +23,11 @@
 #ifndef B2_SHAPE_H
 #define B2_SHAPE_H
 
-#include "b2_api.h"
 #include "b2_math.h"
-#include "b2_collision.h"
 
 class b2BlockAllocator;
 
-/// A shape is used for collision detection. You can create a shape however you like.
-/// Shapes used for simulation in b2World are created automatically when a b2Fixture
-/// is created. Shapes may encapsulate a one or more child shapes.
+/// A shape is used for collision detection.
 class B2_API b2Shape
 {
 public:
@@ -39,36 +35,26 @@ public:
     enum Type
     {
         e_circle = 0,
-        e_polygon = 1,
-        e_ellipse = 2,
-        e_typeCount = 3
+        e_ellipse = 1,
+        e_capsule = 2,
+        e_rectangle = 3,
+        e_polygon = 4,
+        e_typeCount = 5
     };
 
     virtual ~b2Shape() {}
-
-    /// Clone the concrete shape using the provided allocator.
-    virtual b2Shape* Clone(b2BlockAllocator* allocator) const = 0;
-
-    void SetRadius(b2Scalar r);
-
-    b2Scalar GetRadius() const;
-
-    virtual void SetLocalTransform(const b2Transform& xf) = 0;
 
     /// Get the type of this shape. You can use this to down cast to the concrete shape.
     /// @return the shape type.
     Type GetType() const;
 
+    /// Clone the concrete shape using the provided allocator.
+    virtual b2Shape* Clone(b2BlockAllocator* allocator) const = 0;
+
     /// Test a point for containment in this shape. This only works for convex shapes.
     /// @param xf the shape world transform.
     /// @param p a point in world coordinates.
     virtual bool TestPoint(const b2Transform& xf, const b2Vec2& p) const = 0;
-
-    /// Cast a ray against a child shape.
-    /// @param output the ray-cast results.
-    /// @param input the ray-cast input parameters.
-    /// @param transform the transform to be applied to the shape.
-    virtual bool RayCast(b2RayCastOutput* output, const b2RayCastInput& input, const b2Transform& transform) const = 0;
 
     /// Given a transform, compute the associated axis aligned bounding box for a child shape.
     /// @param aabb returns the axis aligned box.
@@ -83,26 +69,17 @@ public:
     /// @param radius the inscribed sphere's radius.
     virtual bool InscribedSphereAtPoint(const b2Vec2& inp, const b2Vec2& bdp, const b2Vec2& normal, b2Vec2& local_center, b2Scalar &radius) const = 0;
 
-    Type m_type;
+    /// Given a dir, compute the support mapping point.
+    /// @param dir a dir in local coordinates.
+    /// @param point the support mapping point in local coordinates.
+    virtual b2Vec2 SupportPoint(const b2Vec2& dir) const = 0;
 
-    /// Radius of a shape. For polygonal shapes this must be b2_polygonRadius. There is no support for
-    /// making rounded polygons.
-    b2Scalar m_radius{0.0};
+    Type m_type;
 };
 
 B2_FORCE_INLINE b2Shape::Type b2Shape::GetType() const
 {
     return m_type;
-}
-
-B2_FORCE_INLINE void b2Shape::SetRadius(b2Scalar r)
-{
-    m_radius = r;
-}
-
-B2_FORCE_INLINE b2Scalar b2Shape::GetRadius() const
-{
-    return m_radius;
 }
 
 #endif

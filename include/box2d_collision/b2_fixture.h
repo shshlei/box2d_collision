@@ -23,8 +23,6 @@
 #ifndef B2_FIXTURE_H
 #define B2_FIXTURE_H
 
-#include "b2_api.h"
-#include "b2_shape.h"
 #include "b2_body.h"
 #include "b2_collision.h"
 
@@ -44,16 +42,16 @@ struct B2_API b2Filter
     }
 
     /// The collision category bits. Normally you would just set one bit.
-    uint16 categoryBits;
+    unsigned short categoryBits;
 
     /// The collision mask bits. This states the categories that this
     /// shape would accept for collision.
-    uint16 maskBits;
+    unsigned short maskBits;
 
     /// Collision groups allow a certain group of objects to never collide (negative)
     /// or always collide (positive). Zero means no collision group. Non-zero group
     /// filtering always wins against the mask bits.
-    int16 groupIndex;
+    short groupIndex;
 };
 
 /// A fixture definition is used to create a fixture. This class defines an
@@ -70,6 +68,9 @@ struct B2_API b2FixtureDef
     /// can create the shape on the stack.
     const b2Shape* shape;
 
+    /// The local transform.
+    b2Transform xf;
+
     /// Use this to store application specific fixture data.
     b2FixtureUserData userData;
 
@@ -80,9 +81,10 @@ struct B2_API b2FixtureDef
 /// This proxy is used internally to connect fixtures to the broad-phase.
 struct B2_API b2FixtureProxy
 {
-    b2AABB aabb;
+    b2AABB aabb;        // un-expanded aabb
     b2Fixture* fixture;
-    int32 proxyId;
+    b2Transform xf;     // global transform
+    int proxyId;
 };
 
 /// A fixture is used to attach a shape to a body for collision detection. A fixture
@@ -101,7 +103,7 @@ public:
     /// Manipulating the shape may lead to non-physical behavior.
     b2Shape* GetShape();
     const b2Shape* GetShape() const;
-
+    
     /// Set the contact filtering data. This will not update contacts until the next time
     /// step when either parent body is active and awake.
     /// This automatically calls Refilter.
@@ -131,17 +133,16 @@ public:
     /// @param p a point in world coordinates.
     bool TestPoint(const b2Vec2& p) const;
 
-    /// Cast a ray against this shape.
-    /// @param output the ray-cast results.
-    /// @param input the ray-cast input parameters.
-    bool RayCast(b2RayCastOutput* output, const b2RayCastInput& input) const;
-
     /// Get the fixture's AABB. This AABB may be enlarge and/or stale.
     /// If you need a more accurate AABB, compute it using the shape and
     /// the body transform.
     const b2AABB& GetAABB() const;
 
-    int32 GetProxyId() const;
+    int GetProxyId() const;
+
+    const b2Transform& GetLocalTransform() const;
+
+    const b2Transform& GetGlobalTransform() const;
 
 protected:
 
@@ -157,18 +158,19 @@ protected:
     void Destroy(b2BlockAllocator* allocator);
 
     // These support body activation/deactivation.
-    void CreateProxies(b2BroadPhase* broadPhase, const b2Transform& xf, bool extend = true);
-    void UpdateProxies(b2BroadPhase* broadPhase, bool extend);
+    void CreateProxies(b2BroadPhase* broadPhase, const b2Transform& xf, bool active = true);
+    void UpdateProxies(b2BroadPhase* broadPhase, bool active);
     void DestroyProxies(b2BroadPhase* broadPhase);
-
-    void Synchronize(b2BroadPhase* broadPhase, const b2Transform& xf1, const b2Transform& xf2);
-
     void Update(b2BroadPhase* broadPhase, const b2Transform& xf);
 
     b2Fixture* m_next;
 
     b2Shape* m_shape;
     b2Body* m_body;
+
+    // Local transform
+    b2Transform m_xf;
+    bool m_identity;
 
     b2FixtureProxy* m_proxies;
 
@@ -239,21 +241,39 @@ B2_FORCE_INLINE const b2Fixture* b2Fixture::GetNext() const
 
 B2_FORCE_INLINE bool b2Fixture::TestPoint(const b2Vec2& p) const
 {
-    return m_shape->TestPoint(m_body->GetTransform(), p);
-}
-
-B2_FORCE_INLINE bool b2Fixture::RayCast(b2RayCastOutput* output, const b2RayCastInput& input) const
-{
-    return m_shape->RayCast(output, input, m_body->GetTransform());
+    if (m_proxies->fixture)
+        return m_shape->TestPoint(m_proxies->xf, p);
+    if (m_identity)
+        return m_shape->TestPoint(m_body->GetTransform(), p);
+    else
+        return m_shape->TestPoint(b2Mul(m_body->GetTransform(), m_xf), p);
 }
 
 B2_FORCE_INLINE const b2AABB& b2Fixture::GetAABB() const
 {
-    return m_proxies->aabb;
+    if (m_proxies->fixture)
+        return m_proxies->aabb;
+    b2Transform xf = m_body->GetTransform();
+    if (!m_identity)
+        xf = b2Mul(xf, m_xf);
+    b2AABB aabb;
+    m_shape->ComputeAABB(&aabb, xf);
+    return aabb;
 }
 
-B2_FORCE_INLINE	int32 b2Fixture::GetProxyId() const
+B2_FORCE_INLINE	int b2Fixture::GetProxyId() const
 {
     return m_proxies->proxyId;
 }
+
+B2_FORCE_INLINE const b2Transform& b2Fixture::GetLocalTransform() const
+{
+    return m_xf;
+}
+
+B2_FORCE_INLINE const b2Transform& b2Fixture::GetGlobalTransform() const
+{
+    return m_proxies->xf;
+}
+
 #endif

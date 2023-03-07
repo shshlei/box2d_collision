@@ -20,9 +20,115 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "box2d_collision/b2_shape.h"
 #include "box2d_collision/b2_collision.h"
 #include "box2d_collision/b2_distance.h"
+
+bool b2CollideShapes(b2Manifold* manifold,
+        const b2Shape* shapeA, const b2Transform& xfA,
+        const b2Shape* shapeB, const b2Transform& xfB, bool separationStop)
+{
+    if (shapeA->GetType() == b2Shape::e_circle && shapeB->GetType() == b2Shape::e_circle)
+        return b2CollideCircles(manifold, (const b2CircleShape *)shapeA, xfA, (const b2CircleShape *)shapeB, xfB, separationStop);
+    else if (shapeA->GetType() == b2Shape::e_capsule && shapeB->GetType() == b2Shape::e_capsule)
+        return b2CollideCapsules(manifold, (const b2CapsuleShape *)shapeA, xfA, (const b2CapsuleShape *)shapeB, xfB, separationStop);
+    else if (shapeA->GetType() == b2Shape::e_polygon && shapeB->GetType() == b2Shape::e_polygon)
+        return b2CollidePolygons(manifold, (const b2PolygonShape *)shapeA, xfA, (const b2PolygonShape *)shapeB, xfB, separationStop);
+    else if (shapeA->GetType() == b2Shape::e_circle)
+    {
+        bool collision = false;
+        if (shapeB->GetType() == b2Shape::e_capsule)
+            collision = b2CollideCapsuleCircle(manifold, (const b2CapsuleShape *)shapeB, xfB, (const b2CircleShape *)shapeA, xfA, separationStop);
+        else if (shapeB->GetType() == b2Shape::e_rectangle)
+            collision = b2CollideRectangleCircle(manifold, (const b2RectangleShape *)shapeB, xfB, (const b2CircleShape *)shapeA, xfA, separationStop);
+        else if (shapeB->GetType() == b2Shape::e_polygon)
+            collision = b2CollidePolygonCircle(manifold, (const b2PolygonShape *)shapeB, xfB, (const b2CircleShape *)shapeA, xfA, separationStop);
+        else 
+        {
+            b2ShapeDistance dist;
+            if (manifold)
+            {
+                b2Scalar d;
+                b2Vec2 p1, p2;
+                collision = !dist.Distance(shapeA, xfA, shapeB, xfB, &d, &p1, &p2);
+                if (!collision)
+                {
+                    manifold->separation = d;
+                    manifold->point = p2;
+                    manifold->normal = (p2 - p1).Normalized();
+                }
+                else 
+                    manifold->separation = b2Scalar(0.0);
+            }
+            else 
+                collision = !dist.Separation(shapeA, xfA, shapeB, xfB);
+            return collision;
+        }
+        if (manifold)
+        {
+            manifold->normal = -manifold->normal;
+            manifold->point = manifold->point + manifold->normal * manifold->separation;
+        }
+        return collision;
+    }
+    else if (shapeB->GetType() == b2Shape::e_circle)
+    {
+        if (shapeA->GetType() == b2Shape::e_capsule)
+            return b2CollideCapsuleCircle(manifold, (const b2CapsuleShape *)shapeA, xfA, (const b2CircleShape *)shapeB, xfB, separationStop);
+        else if (shapeA->GetType() == b2Shape::e_rectangle)       
+            return b2CollideRectangleCircle(manifold, (const b2RectangleShape *)shapeA, xfA, (const b2CircleShape *)shapeB, xfB, separationStop);
+        else if (shapeA->GetType() == b2Shape::e_polygon)       
+            return b2CollidePolygonCircle(manifold, (const b2PolygonShape *)shapeA, xfA, (const b2CircleShape *)shapeB, xfB, separationStop);
+        else 
+        {
+            bool collision = false;
+            b2ShapeDistance dist;
+            if (manifold)
+            {
+                b2Scalar d;
+                b2Vec2 p1, p2;
+                collision = !dist.Distance(shapeA, xfA, shapeB, xfB, &d, &p1, &p2);
+                if (!collision)
+                {
+                    manifold->separation = d;
+                    manifold->point = p2;
+                    manifold->normal = (p2 - p1).Normalized();
+                }
+                else 
+                    manifold->separation = b2Scalar(0.0);
+            }
+            else 
+                collision = !dist.Separation(shapeA, xfA, shapeB, xfB);
+            return collision;
+        }
+    }
+    else 
+    {
+        bool collision = false;
+        b2ShapeDistance dist;
+        if (manifold)
+        {
+            b2Scalar d;
+            b2Vec2 p1, p2;
+            collision = !dist.Distance(shapeA, xfA, shapeB, xfB, &d, &p1, &p2);
+            if (!collision)
+            {
+                manifold->separation = d;
+                manifold->point = p2;
+                manifold->normal = (p2 - p1).Normalized();
+            }
+            else 
+                manifold->separation = b2Scalar(0.0);
+        }
+        else 
+            collision = !dist.Separation(shapeA, xfA, shapeB, xfB);
+        return collision;
+    }
+}
+
+bool b2CollideShapes(const b2Shape* shapeA, const b2Transform& xfA, const b2Shape* shapeB, const b2Transform& xfB)
+{
+    return b2CollideShapes(nullptr, shapeA, xfA, shapeB, xfB);
+}
 
 void b2InscribedSpheres::Initialize(const b2ContactResult* manifold, const b2Shape *shape1, const b2Shape *shape2)
 {
@@ -62,74 +168,7 @@ void b2InscribedSpheres::Initialize(const b2Manifold* manifold, const b2Shape *s
     }
 }
 
-// From Real-time Collision Detection, p179.
-bool b2AABB::RayCast(b2RayCastOutput* output, const b2RayCastInput& input) const
-{
-    b2Scalar tmin = -b2_maxFloat;
-    b2Scalar tmax = b2_maxFloat;
-
-    b2Vec2 p = input.p1;
-    b2Vec2 d = input.p2 - input.p1;
-    b2Vec2 absD = b2Abs(d);
-
-    b2Vec2 normal;
-
-    for (int32 i = 0; i < 2; ++i)
-    {
-        if (absD(i) < b2_epsilon)
-        {
-            // Parallel.
-            if (p(i) < lowerBound(i) || upperBound(i) < p(i))
-            {
-                return false;
-            }
-        }
-        else
-        {
-            b2Scalar inv_d = b2Scalar(1.0) / d(i);
-            b2Scalar t1 = (lowerBound(i) - p(i)) * inv_d;
-            b2Scalar t2 = (upperBound(i) - p(i)) * inv_d;
-
-            // Sign of the normal vector.
-            b2Scalar s = -b2Scalar(1.0);
-
-            if (t1 > t2)
-            {
-                b2Swap(t1, t2);
-                s = b2Scalar(1.0);
-            }
-
-            // Push the min up
-            if (t1 > tmin)
-            {
-                normal.SetZero();
-                normal(i) = s;
-                tmin = t1;
-            }
-
-            // Pull the max down
-            tmax = b2Min(tmax, t2);
-
-            if (tmin > tmax)
-            {
-                return false;
-            }
-        }
-    }
-
-    // Does the ray start inside the box?
-    // Does the ray intersect beyond the max fraction?
-    if (tmin < b2Scalar(0.0) || input.maxFraction < tmin)
-    {
-        return false;
-    }
-
-    // Intersection.
-    output->fraction = tmin;
-    output->normal = normal;
-    return true;
-}
-
+/*
 bool b2TestOverlap(const b2Shape* shapeA, const b2Shape* shapeB, const b2Transform& xfA, const b2Transform& xfB)
 {
     b2DistanceInput input;
@@ -148,3 +187,4 @@ bool b2TestOverlap(const b2Shape* shapeA, const b2Shape* shapeB, const b2Transfo
 
     return output.distance < b2Scalar(10.0) * b2_epsilon;
 }
+*/

@@ -23,8 +23,6 @@
 #ifndef B2_BODY_H
 #define B2_BODY_H
 
-#include "b2_api.h"
-#include "b2_math.h"
 #include "b2_shape.h"
 #include "b2_block_allocator.h"
 
@@ -103,22 +101,18 @@ public:
         m_blockAllocator = blockAllocator;
     }
 
-    /// Creates a fixture and attach it to this body. Use this function if you need
-    /// to set some fixture parameters, like friction. Otherwise you can create the
-    /// fixture directly from a shape.
-    /// Contacts are not created until the next time step.
+    /// Creates a fixture and attach it to this body.
     /// @param def the fixture definition.
     /// @warning This function is locked during callbacks.
     b2Fixture* CreateFixture(const b2FixtureDef* def);
 
     /// Creates a fixture from a shape and attach it to this body.
-    /// This is a convenience function. Use b2FixtureDef if you need to set parameters
-    /// like friction, restitution, user data, or filtering.
     /// @param shape the shape to be cloned.
+    /// @param xf the shape local transform
     /// @warning This function is locked during callbacks.
-    b2Fixture* CreateFixture(const b2Shape* shape, uint32 shape_index = 0);
+    b2Fixture* CreateFixture(const b2Shape* shape, const b2Transform& xf = b2Transform(), unsigned int shape_index = 0);
 
-    b2Fixture* AddShape(const b2Shape* shape, uint32 shape_index = 0);
+    b2Fixture* AddShape(const b2Shape* shape, const b2Transform& xf = b2Transform(), unsigned int shape_index = 0);
 
     /// Destroy a fixture. This removes the fixture from the broad-phase and
     /// destroys all contacts associated with this fixture. This will
@@ -135,11 +129,7 @@ public:
     /// @param angle the world rotation in radians.
     void SetTransform(const b2Vec2& position, b2Scalar angle);
 
-    void SetTransform(const b2Vec2& position1, b2Scalar angle1, const b2Vec2& position2, b2Scalar angle2);
-
     void SetTransform(const b2Transform& xf);
-
-    void SetTransform(const b2Transform& xf1, const b2Transform& xf2);
 
     /// Get the body transform for the body's origin.
     /// @return the world transform of the body's origin.
@@ -155,9 +145,6 @@ public:
 
     /// Get the world position of the center of mass.
     const b2Vec2& GetWorldCenter() const;
-
-    /// Get the local position of the center of mass.
-    const b2Vec2& GetLocalCenter() const;
 
     /// Get the world coordinates of a point given the local coordinates.
     /// @param localPoint a point on the body measured relative the the body's origin.
@@ -218,6 +205,10 @@ public:
     b2BodyUserData& GetUserData();
     const b2BodyUserData& GetUserData() const;
 
+    // This is used to prevent connected bodies from colliding.
+    // It may lie, depending on the collideConnected flag.
+    bool ShouldCollide(const b2Body* other) const;
+
 private:
 
     friend class b2Contact;
@@ -225,22 +216,18 @@ private:
 
     std::string m_name;
 
-    // This is used to prevent connected bodies from colliding.
-    // It may lie, depending on the collideConnected flag.
-    bool ShouldCollide(const b2Body* other) const;
-
     b2BlockAllocator *m_blockAllocator;
 
     b2BodyType m_type;
 
     b2Transform m_xf;		// the body origin transform
-    b2Sweep m_sweep;		// the swept motion for CCD
+    b2Scalar m_angle;
 
     b2Body* m_prev;
     b2Body* m_next;
 
     b2Fixture* m_fixtureList;
-    int32 m_fixtureCount;
+    int m_fixtureCount;
 
     b2BodyUserData m_userData;
 
@@ -260,36 +247,14 @@ B2_FORCE_INLINE b2BodyType b2Body::GetType() const
 
 B2_FORCE_INLINE void b2Body::SetTransform(const b2Vec2& position, b2Scalar angle)
 {
-    m_xf.q.Set(angle);
-    m_xf.p = position;
-
-    m_sweep.c = position;
-    m_sweep.a = angle;
-
-    m_sweep.c0 = m_sweep.c;
-    m_sweep.a0 = angle;
-}
-
-B2_FORCE_INLINE void b2Body::SetTransform(const b2Vec2& position1, b2Scalar angle1, const b2Vec2& position2, b2Scalar angle2)
-{
-    m_xf.q.Set(angle1);
-    m_xf.p = position1;
-
-    m_sweep.c0 = position1;
-    m_sweep.a0 = angle1;
-
-    m_sweep.c = position2;
-    m_sweep.a = angle2;
+    m_xf.Set(position, angle);
+    m_angle = angle;
 }
 
 B2_FORCE_INLINE void b2Body::SetTransform(const b2Transform& xf)
 {
-    SetTransform(xf.p, b2Atan2(xf.q.s, xf.q.c));
-}
-
-B2_FORCE_INLINE void b2Body::SetTransform(const b2Transform& xf1, const b2Transform& xf2)
-{
-    SetTransform(xf1.p, b2Atan2(xf1.q.s, xf1.q.c), xf2.p, b2Atan2(xf2.q.s, xf2.q.c));
+    m_xf = xf;
+    m_angle = b2Atan2(xf.q.s, xf.q.c);
 }
 
 B2_FORCE_INLINE const b2Transform& b2Body::GetTransform() const
@@ -304,17 +269,12 @@ B2_FORCE_INLINE const b2Vec2& b2Body::GetPosition() const
 
 B2_FORCE_INLINE b2Scalar b2Body::GetAngle() const
 {
-    return m_sweep.a0;
+    return m_angle;
 }
 
 B2_FORCE_INLINE const b2Vec2& b2Body::GetWorldCenter() const
 {
-    return m_sweep.c0;
-}
-
-B2_FORCE_INLINE const b2Vec2& b2Body::GetLocalCenter() const
-{
-    return m_sweep.localCenter;
+    return m_xf.p;
 }
 
 B2_FORCE_INLINE b2Vec2 b2Body::GetWorldPoint(const b2Vec2& localPoint) const

@@ -20,68 +20,59 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef B2_ELLIPSE_SHAPE_H
-#define B2_ELLIPSE_SHAPE_H
+#ifndef B2_CIRCLE_SHAPE_H
+#define B2_CIRCLE_SHAPE_H
 
-#include "b2_api.h"
 #include "b2_shape.h"
 
 /// A solid circle shape
-class B2_API b2EllipseShape : public b2Shape
+class B2_API b2CircleShape : public b2Shape
 {
 public:
-    b2EllipseShape();
+    b2CircleShape();
 
-    /// Implement b2Shape.
-    b2Shape* Clone(b2BlockAllocator* allocator) const override;
+    b2CircleShape(b2Scalar r);
 
     void SetRadius(b2Scalar r);
 
     b2Scalar GetRadius() const;
 
-    void SetLocalTransform(const b2Transform& xf) override;
+    /// Implement b2Shape.
+    b2Shape* Clone(b2BlockAllocator* allocator) const override;
 
     /// Implement b2Shape.
     bool TestPoint(const b2Transform& transform, const b2Vec2& p) const override;
-
-    /// Implement b2Shape.
-    /// @note because the circle is solid, rays that start inside do not hit because the normal is
-    /// not defined.
-    bool RayCast(b2RayCastOutput* output, const b2RayCastInput& input,
-            const b2Transform& transform) const override;
 
     /// @see b2Shape::ComputeAABB
     void ComputeAABB(b2AABB* aabb, const b2Transform& transform) const override;
 
     bool InscribedSphereAtPoint(const b2Vec2& inp, const b2Vec2& bdp, const b2Vec2& normal, b2Vec2& local_center, b2Scalar &radius) const override;
 
-    /// Position
-    b2Vec2 m_p;
+    b2Vec2 SupportPoint(const b2Vec2& dir) const override;
 
-    /// Radius of a shape. For polygonal shapes this must be b2_polygonRadius. There is no support for
-    /// making rounded polygons.
     b2Scalar m_radius;
 };
 
-B2_FORCE_INLINE b2EllipseShape::b2EllipseShape()
+B2_FORCE_INLINE b2CircleShape::b2CircleShape()
 {
     m_type = e_circle;
     m_radius = b2Scalar(0.0);
-    m_p.SetZero();
 }
 
-B2_FORCE_INLINE void b2EllipseShape::SetLocalTransform(const b2Transform& xf)
+B2_FORCE_INLINE b2CircleShape::b2CircleShape(b2Scalar r)
 {
-    m_p = b2Mul(xf, m_p);
+    m_type = e_circle;
+    m_radius = r;
 }
 
-B2_FORCE_INLINE void b2EllipseShape::SetRadius(b2Scalar r)
+B2_FORCE_INLINE void b2CircleShape::SetRadius(b2Scalar r)
 {
     m_radius = r;
 }
 
-B2_FORCE_INLINE b2Scalar b2EllipseShape::GetRadius() const
+B2_FORCE_INLINE b2Scalar b2CircleShape::GetRadius() const
 {
     return m_radius;
 }
+
 #endif

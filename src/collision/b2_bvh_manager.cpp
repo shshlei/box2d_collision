@@ -20,8 +20,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "box2d_collision/b2_collision.h"
-#include "box2d_collision/b2_contact.h"
 #include "box2d_collision/b2_bvh_manager.h"
 
 #include <new>
@@ -35,9 +33,6 @@ b2BVHManager::b2BVHManager()
 
     m_bodyList = nullptr;
     m_bodyCount = 0;
-
-    m_contactList = nullptr;
-    m_contactCount = 0;
 
     b2BlockAllocator* allocator = &m_blockAllocator;
     void* memory = allocator->Allocate(sizeof(b2BroadPhase));
@@ -56,12 +51,12 @@ b2BVHManager::~b2BVHManager()
     allocator->Free(m_broadPhase, sizeof(b2BroadPhase));
 }
 
-b2Body* b2BVHManager::AddBody(const std::string& name, const b2Shape* shape, bool active)
+b2Body* b2BVHManager::AddBody(const std::string& name, const b2Shape* shape, const b2Transform& xf, bool active)
 {
-    return AddBody(name, std::vector<const b2Shape *>(1, shape), active);
+    return AddBody(name, std::vector<const b2Shape *>(1, shape), std::vector<b2Transform>(1, xf), active);
 }
 
-b2Body* b2BVHManager::AddBody(const std::string& name, const std::vector<const b2Shape*>& shapes, bool active)
+b2Body* b2BVHManager::AddBody(const std::string& name, const std::vector<const b2Shape*>& shapes, const std::vector<b2Transform>& xfs, bool active)
 {
 //    b2Assert(!name.empty());
 //    b2Assert(!shapes.empty());
@@ -70,16 +65,16 @@ b2Body* b2BVHManager::AddBody(const std::string& name, const std::vector<const b
     for (std::size_t i = 0; i < shapes.size(); i++)
     {
         const b2Shape *shape = shapes[i];
-        b2Fixture* fixture = body->AddShape(shape, i);
+        b2Fixture* fixture = body->AddShape(shape, xfs[i], i);
         fixture->CreateProxies(m_broadPhase, body->GetTransform(), active);
     }
 
     return body;
 }
 
-void b2BVHManager::AddShapeToBody(b2Body *body, const b2Shape *shape, uint32 shape_index)
+void b2BVHManager::AddShapeToBody(b2Body *body, const b2Shape *shape, const b2Transform& xf, unsigned int shape_index)
 {
-    b2Fixture* fixture = body->AddShape(shape, shape_index);
+    b2Fixture* fixture = body->AddShape(shape, xf, shape_index);
     fixture->CreateProxies(m_broadPhase, body->GetTransform(), body->IsActive());
 }
 
@@ -109,28 +104,6 @@ b2Body* b2BVHManager::CreateBody(const b2BodyDef* def)
     ++m_bodyCount;
 
     return b;
-}
-
-bool b2BVHManager::HasBody(const std::string& name) const
-{
-    for (const b2Body* b = m_bodyList; b; b = b->m_next)
-    {
-        if (b->GetName() == name)
-            return true;
-    }
-
-    return false;
-}
-
-bool b2BVHManager::RemoveBody(const std::string& name)
-{
-    b2Body* body = GetBody(name);
-    if (body)
-    {
-        DestroyBody(body);
-        return true;
-    }
-    return false;
 }
 
 void b2BVHManager::DestroyBody(b2Body* b)
@@ -174,6 +147,28 @@ void b2BVHManager::DestroyBody(b2Body* b)
     --m_bodyCount;
     b->~b2Body();
     m_blockAllocator.Free(b, sizeof(b2Body));
+}
+
+bool b2BVHManager::HasBody(const std::string& name) const
+{
+    for (const b2Body* b = m_bodyList; b; b = b->m_next)
+    {
+        if (b->GetName() == name)
+            return true;
+    }
+
+    return false;
+}
+
+bool b2BVHManager::RemoveBody(const std::string& name)
+{
+    b2Body* body = GetBody(name);
+    if (body)
+    {
+        DestroyBody(body);
+        return true;
+    }
+    return false;
 }
 
 b2Body* b2BVHManager::GetBody(const std::string& name)
@@ -283,6 +278,36 @@ void b2BVHManager::SetBodyActive(const std::string& name, bool active)
     }
 }
 
+void b2BVHManager::SetActiveBodys(const std::vector<std::string>& names)
+{
+    for (b2Body* b = m_bodyList; b; b = b->m_next)
+    {
+        if (std::find(names.begin(), names.end(), b->GetName()) != names.end())
+        {
+            if (!b->IsActive())
+            {
+                b2Fixture *f = b->GetFixtureList();
+                while (f)
+                {
+                    f->UpdateProxies(m_broadPhase, true);
+                    f = f->GetNext();
+                }
+                b->SetType(b2_dynamicBody);
+            }
+        }
+        else if (b->IsActive()) 
+        {
+            b2Fixture *f = b->GetFixtureList();
+            while (f)
+            {
+                f->UpdateProxies(m_broadPhase, false);
+                f = f->GetNext();
+            }           
+            b->SetType(b2_staticBody);
+        }
+    }
+}
+
 void b2BVHManager::SetFilterData(const std::string& name, const b2Filter& filter)
 {
     b2Body* body = GetBody(name);
@@ -313,355 +338,260 @@ void b2BVHManager::SetBodyTransform(const std::string& name, const b2Transform& 
     }
 }
 
-void b2BVHManager::SetActiveBodys(const std::vector<std::string>& names)
+struct b2BVHManagerCallback
 {
-    for (b2Body* b = m_bodyList; b; b = b->m_next)
-    {
-        if (std::find(names.begin(), names.end(), b->GetName()) != names.end())
-        {
-            if (!b->IsActive())
-            {
-                b2Fixture *f = b->GetFixtureList();
-                while (f)
-                {
-                    f->UpdateProxies(m_broadPhase, true);
-                    f = f->GetNext();
-                }
-                b->SetType(b2_dynamicBody);
-            }
-        }
-        else if (b->IsActive()) 
-        {
-            b2Fixture *f = b->GetFixtureList();
-            while (f)
-            {
-                f->UpdateProxies(m_broadPhase, false);
-                f = f->GetNext();
-            }           
-
-            b->SetType(b2_staticBody);
-        }
-    }
-}
-
-struct b2BVHManagerQueryWrapper
-{
-    bool QueryCallback(int32 proxyId)
+    bool CollideCallback(int proxyId)
     {
         b2FixtureProxy* proxy = (b2FixtureProxy*)broadPhase->GetUserData(proxyId);
-        return callback->ReportFixture(proxy->fixture);
+        return callback->ReportCollision(proxy->fixture);
     }
-    const b2BroadPhase* broadPhase;
-    b2QueryCallback* callback;
+    bool DistanceCallback(int proxyId, b2Scalar &dist)
+    {
+        b2FixtureProxy* proxy = (b2FixtureProxy*)broadPhase->GetUserData(proxyId);
+        return callback->ReportDistance(proxy->fixture, dist);
+    }
+    bool DistanceCallback(int proxyIdA, int proxyIdB, b2Scalar &dist)
+    {
+        b2FixtureProxy* proxyA = (b2FixtureProxy*)broadPhase->GetUserData(proxyIdA);
+        b2FixtureProxy* proxyB = (b2FixtureProxy*)broadPhase->GetUserData(proxyIdB);
+        return callback->ReportDistance(proxyA->fixture, proxyB->fixture, dist);
+    }
+    const b2BroadPhase* broadPhase{nullptr};
+    b2NaiveCallback* callback{nullptr};
 };
 
-void b2BVHManager::QueryAABB(b2QueryCallback* callback, const b2AABB& aabb) const
+bool b2BVHManager::Collide(b2NaiveCallback* callback, const b2AABB& aabb) const
 {
-    b2BVHManagerQueryWrapper wrapper;
+    b2BVHManagerCallback wrapper;
     wrapper.broadPhase = m_broadPhase;
     wrapper.callback = callback;
-    m_broadPhase->Query(&wrapper, aabb);
+    return m_broadPhase->Collide(&wrapper, aabb);
 }
 
-void b2BVHManager::QueryPoint(b2QueryCallback* callback, const b2Vec2& aabb) const
+bool b2BVHManager::Collide(b2NaiveCallback* callback, const b2Vec2& point) const
 {
-    b2BVHManagerQueryWrapper wrapper;
+    b2BVHManagerCallback wrapper;
     wrapper.broadPhase = m_broadPhase;
     wrapper.callback = callback;
-    m_broadPhase->Query(&wrapper, aabb);
+    return m_broadPhase->Collide(&wrapper, point);
 }
 
-struct b2BVHManagerQueryWrapper2
+struct b2BVHManagerCallback2
 {
-    bool QueryCallback(int32 proxyIdA, int32 proxyIdB)
+    bool CollideCallback(int proxyIdA, int proxyIdB)
     {
         b2FixtureProxy* proxyA = (b2FixtureProxy*)broadPhaseA->GetUserData(proxyIdA);
         b2FixtureProxy* proxyB = (b2FixtureProxy*)broadPhaseB->GetUserData(proxyIdB);
-        return callback->ReportFixture(proxyA->fixture, proxyB->fixture);
+        return callback->ReportCollision(proxyA->fixture, proxyB->fixture);
     }
-    const b2BroadPhase* broadPhaseA;
-    const b2BroadPhase* broadPhaseB;
-    b2QueryCallback2* callback;
+    bool DistanceCallback(int proxyIdA, int proxyIdB, b2Scalar &dist)
+    {
+        b2FixtureProxy* proxyA = (b2FixtureProxy*)broadPhaseA->GetUserData(proxyIdA);
+        b2FixtureProxy* proxyB = (b2FixtureProxy*)broadPhaseB->GetUserData(proxyIdB);
+        return callback->ReportDistance(proxyA->fixture, proxyB->fixture, dist);
+    }
+    const b2BroadPhase* broadPhaseA{nullptr};
+    const b2BroadPhase* broadPhaseB{nullptr};
+    b2NaiveCallback* callback{nullptr};
 };
 
-void b2BVHManager::QueryManager(b2QueryCallback2* callback, const b2BVHManager* manager) const
+bool b2BVHManager::Collide(b2NaiveCallback* callback, const b2BVHManager* manager) const
 {
-    b2BVHManagerQueryWrapper2 wrapper;
+    b2BVHManagerCallback2 wrapper;
     wrapper.broadPhaseA = m_broadPhase;
     wrapper.broadPhaseB = manager->GetBroadPhase();
     wrapper.callback = callback;
-    m_broadPhase->Query(&wrapper, manager->GetBroadPhase());
+    return m_broadPhase->Collide(&wrapper, manager->GetBroadPhase());
 }
 
-struct b2BVHManagerRayCastWrapper
+bool b2BVHManager::Distance(b2NaiveCallback* callback, const b2AABB& aabb, b2Scalar &dist) const
 {
-    b2Scalar RayCastCallback(const b2RayCastInput& input, int32 proxyId)
-    {
-        void* userData = broadPhase->GetUserData(proxyId);
-        b2FixtureProxy* proxy = (b2FixtureProxy*)userData;
-        b2Fixture* fixture = proxy->fixture;
-        b2RayCastOutput output;
-        bool hit = fixture->RayCast(&output, input);
-
-        if (hit)
-        {
-            b2Scalar fraction = output.fraction;
-            b2Vec2 point = (b2Scalar(1.0) - fraction) * input.p1 + fraction * input.p2;
-            return callback->ReportFixture(fixture, point, output.normal, fraction);
-        }
-
-        return input.maxFraction;
-    }
-
-    const b2BroadPhase* broadPhase;
-    b2RayCastCallback* callback;
-};
-
-void b2BVHManager::RayCast(b2RayCastCallback* callback, const b2Vec2& point1, const b2Vec2& point2) const
-{
-    b2BVHManagerRayCastWrapper wrapper;
+    b2BVHManagerCallback wrapper;
     wrapper.broadPhase = m_broadPhase;
     wrapper.callback = callback;
-    b2RayCastInput input;
-    input.maxFraction = b2Scalar(1.0);
-    input.p1 = point1;
-    input.p2 = point2;
-    m_broadPhase->RayCast(&wrapper, input);
+    return m_broadPhase->Distance(&wrapper, aabb, dist);
 }
 
-bool b2BVHManager::ContactTest(b2Manifold* worldManifold, b2InscribedSpheres* inscribedSpheres)
+bool b2BVHManager::Distance(b2NaiveCallback* callback, const b2Vec2& point, b2Scalar &dist) const
 {
-    bool collision = false;
-    m_broadPhase->UpdatePairs(this);
-    b2Contact* c = m_contactList;
-    while (c)
-    {
-        collision = CalculateContactResult(c, worldManifold, inscribedSpheres);
-        if (collision)
-            break;
-        c = c->GetNext();
-    }
-
-    while (m_contactList)
-    {
-        if (collision)
-        {
-            b2Fixture* fixtureA = m_contactList->GetFixtureA();
-            b2Fixture* fixtureB = m_contactList->GetFixtureB();
-            b2Body* bodyA = fixtureA->GetBody();
-            b2Body* bodyB = fixtureB->GetBody();
-            if (bodyA->IsActive())
-                m_broadPhase->TouchProxy(fixtureA->GetProxyId());
-            if (bodyB->IsActive())
-                m_broadPhase->TouchProxy(fixtureB->GetProxyId());
-        }
-        DestroyContact(m_contactList);
-    }
-
-    return collision;
+    b2BVHManagerCallback wrapper;
+    wrapper.broadPhase = m_broadPhase;
+    wrapper.callback = callback;
+    return m_broadPhase->Distance(&wrapper, point, dist);
 }
 
-bool b2BVHManager::ContactTest(b2ContactResult* contacts, b2InscribedSpheres* inscribedSpheres)
+bool b2BVHManager::Distance(b2NaiveCallback* callback, const b2BVHManager* manager, b2Scalar &dist) const
 {
-    bool collision = false;
-    m_broadPhase->UpdatePairs(this);
-    b2Contact* c = m_contactList;
-    while (c)
-    {
-        collision = CalculateContactResult(c, contacts, inscribedSpheres);
-        if (collision)
-            break;
-        c = c->GetNext();
-    }
-
-    while (m_contactList)
-    {
-        if (collision)
-        {
-            b2Fixture* fixtureA = m_contactList->GetFixtureA();
-            b2Fixture* fixtureB = m_contactList->GetFixtureB();
-            b2Body* bodyA = fixtureA->GetBody();
-            b2Body* bodyB = fixtureB->GetBody();
-            if (bodyA->IsActive())
-                m_broadPhase->TouchProxy(fixtureA->GetProxyId());
-            if (bodyB->IsActive())
-                m_broadPhase->TouchProxy(fixtureB->GetProxyId());
-        }
-        DestroyContact(m_contactList);
-    }
-
-    return collision;
+    b2BVHManagerCallback2 wrapper;
+    wrapper.broadPhaseA = m_broadPhase;
+    wrapper.broadPhaseB = manager->GetBroadPhase();
+    wrapper.callback = callback;
+    return m_broadPhase->Distance(&wrapper, manager->GetBroadPhase(), dist);
 }
 
-bool b2BVHManager::ContactTest(b2BVHManager *manager, b2Manifold* worldManifold, b2InscribedSpheres* inscribedSpheres)
+bool b2BVHManager::SelfDistance(b2NaiveCallback* callback, b2Scalar &dist) const
 {
-    if (ContactTest(worldManifold, inscribedSpheres))
-        return true;
-    if (manager->ContactTest(worldManifold, inscribedSpheres))
-        return true;
-
-    struct b2BVHManagerQuery2
-    {
-        bool QueryCallback(int32 proxyIdA, int32 proxyIdB)
-        {
-            manager->AddPair(broadPhaseA->GetUserData(proxyIdA), broadPhaseB->GetUserData(proxyIdB));
-            b2Contact* c = manager->GetContactList();
-            if (c)
-            {
-                collision = manager->CalculateContactResult(c, worldManifold, inscribedSpheres);
-                manager->DestroyContact(c);
-            }
-            return !collision;
-        }
-        bool collision{false};
-        b2BVHManager *manager;
-        const b2BroadPhase* broadPhaseA;
-        const b2BroadPhase* broadPhaseB;
-        b2Manifold* worldManifold;
-        b2InscribedSpheres* inscribedSpheres;
-    };
-
-    b2BVHManagerQuery2 query;
-    query.manager = this;
-    query.broadPhaseA = GetBroadPhase();
-    query.broadPhaseB = manager->GetBroadPhase();
-    query.worldManifold = worldManifold;
-    query.inscribedSpheres = inscribedSpheres;
-    m_broadPhase->Query(&query, manager->GetBroadPhase());
-    return query.collision;
+    b2BVHManagerCallback wrapper;
+    wrapper.broadPhase = m_broadPhase;
+    wrapper.callback = callback;
+    return m_broadPhase->SelfDistance(&wrapper, dist);
 }
 
-bool b2BVHManager::ContactTest(b2BVHManager *manager, b2ContactResult* contacts, b2InscribedSpheres* inscribedSpheres)
+bool CollisionResult(const b2FixtureProxy* proxyA, const b2FixtureProxy* proxyB,
+                     b2BVHManager* manager,
+                     b2Manifold* manifold,
+                     b2ContactResult* contacts,
+                     b2InscribedSpheres* inscribedSpheres)
 {
-    if (ContactTest(contacts, inscribedSpheres))
-        return true;
-    if (manager->ContactTest(contacts, inscribedSpheres))
-        return true;
+    b2Fixture* fixtureA = proxyA->fixture;
+    b2Fixture* fixtureB = proxyB->fixture;
 
-    struct b2BVHManagerQuery2
-    {
-        bool QueryCallback(int32 proxyIdA, int32 proxyIdB)
-        {
-            manager->AddPair(broadPhaseA->GetUserData(proxyIdA), broadPhaseB->GetUserData(proxyIdB));
-            b2Contact* c = manager->GetContactList();
-            if (c)
-            {
-                collision = manager->CalculateContactResult(c, contacts, inscribedSpheres);
-                manager->DestroyContact(c);
-            }
-            return !collision;
-        }
-        bool collision{false};
-        b2BVHManager *manager;
-        const b2BroadPhase* broadPhaseA;
-        const b2BroadPhase* broadPhaseB;
-        b2ContactResult* contacts;
-        b2InscribedSpheres* inscribedSpheres;
-    };
-
-    b2BVHManagerQuery2 query;
-    query.manager = this;
-    query.broadPhaseA = GetBroadPhase();
-    query.broadPhaseB = manager->GetBroadPhase();
-    query.contacts = contacts;
-    query.inscribedSpheres = inscribedSpheres;
-    m_broadPhase->Query(&query, manager->GetBroadPhase());
-    return query.collision;
-}
-
-bool b2BVHManager::CalculateContactResult(b2Contact* c, b2Manifold* worldManifold, b2InscribedSpheres* inscribedSpheres) const
-{
-    bool collision = false;
-    b2Fixture* fixtureA = c->GetFixtureA();
-    b2Fixture* fixtureB = c->GetFixtureB();
     b2Body* bodyA = fixtureA->GetBody();
     b2Body* bodyB = fixtureB->GetBody();
-    const b2Transform& xfA = bodyA->GetTransform();
-    const b2Transform& xfB = bodyB->GetTransform();
-    if (worldManifold)
-    {
-        if (c->Evaluate(worldManifold, xfA, xfB))
-        {
-            collision = true;
-            if (inscribedSpheres)
-                inscribedSpheres->Initialize(worldManifold, fixtureA->GetShape(), xfA, fixtureB->GetShape(), xfB);
-        }
-    }
-    else 
-    {
-        if (c->Evaluate(nullptr, xfA, xfB))
-            collision = true;
-    }
-    return collision;
-}
 
-bool b2BVHManager::CalculateContactResult(b2Contact* c, b2ContactResult* contacts, b2InscribedSpheres* inscribedSpheres) const
-{
-    bool collision = false;
-    b2Fixture* fixtureA = c->GetFixtureA();
-    b2Fixture* fixtureB = c->GetFixtureB();
-    b2Body* bodyA = fixtureA->GetBody();
-    b2Body* bodyB = fixtureB->GetBody();
-    const b2Transform& xfA = bodyA->GetTransform();
-    const b2Transform& xfB = bodyB->GetTransform();
-    if (contacts)
+    // Are the fixtures on the same body?
+    if (bodyA == bodyB)
+        return false;
+
+    if (!bodyA->IsEnabled() || !bodyB->IsEnabled())
+        return false;
+
+    // Does a joint override collision? Is at least one body dynamic?
+    if (!bodyB->ShouldCollide(bodyA))
+        return false;
+
+    // Check user filtering.
+    if (manager->GetContactFilter() && !manager->GetContactFilter()->ShouldCollide(fixtureA, fixtureB))
+        return false;
+
+    if (!b2TestOverlap(fixtureA->GetAABB(), fixtureB->GetAABB()))
+        return false;
+
+    const b2Transform& xfA = fixtureA->GetGlobalTransform();
+    const b2Transform& xfB = fixtureB->GetGlobalTransform();       
+    bool collision = b2CollideShapes(manifold, fixtureA->GetShape(), xfA, fixtureB->GetShape(), xfB);
+    if (collision && manifold)
     {
-        b2Manifold worldManifold;
-        if (c->Evaluate(&worldManifold, xfA, xfB))
+        if (contacts)
         {
-            collision = true;
             contacts->names[0] = bodyA->GetName();
             contacts->names[1] = bodyB->GetName();
             contacts->shape_id[0] = fixtureA->GetUserData().pointer;
             contacts->shape_id[1] = fixtureB->GetUserData().pointer;
             contacts->transforms[0] = xfA;
             contacts->transforms[1] = xfB;
-            contacts->normal = worldManifold.normal;
-            contacts->separation = worldManifold.separation;
-            contacts->points[0] = worldManifold.point - worldManifold.separation * worldManifold.normal;
-            contacts->points[1] = worldManifold.point;
+            contacts->normal = manifold->normal;
+            contacts->separation = manifold->separation;
+            contacts->points[0] = manifold->point - manifold->separation * manifold->normal;
+            contacts->points[1] = manifold->point;
             contacts->local_points[0] = b2MulT(xfA.q, contacts->points[0] - xfA.p);
             contacts->local_points[1] = b2MulT(xfB.q, contacts->points[1] - xfB.p);
-            if (inscribedSpheres)
-                inscribedSpheres->Initialize(contacts, fixtureA->GetShape(), fixtureB->GetShape());
         }
-    }
-    else 
-    {
-        if (c->Evaluate(nullptr, xfA, xfB))
-            collision = true;
+        if (inscribedSpheres)
+        {
+            if (contacts)
+                inscribedSpheres->Initialize(contacts, fixtureA->GetShape(), fixtureB->GetShape());
+            else
+                inscribedSpheres->Initialize(manifold, fixtureA->GetShape(), xfA, fixtureB->GetShape(), xfB);
+        }
     }
     return collision;
 }
 
-void b2BVHManager::DestroyContact(b2Contact* c)
+/// Self collision test.
+struct b2BVHManagerActiveCollideWrapper
 {
-    // Remove from the world.
-    if (c->m_prev)
+    bool Collide(void* proxyUserDataA, void* proxyUserDataB)
     {
-        c->m_prev->m_next = c->m_next;
+        b2FixtureProxy* proxyA = (b2FixtureProxy*)proxyUserDataA;
+        b2FixtureProxy* proxyB = (b2FixtureProxy*)proxyUserDataB;
+        return CollisionResult(proxyA, proxyB, manager, manifold, contacts, inscribedSpheres);
     }
+    b2BVHManager* manager;
+    b2Manifold* manifold{nullptr};
+    b2InscribedSpheres* inscribedSpheres{nullptr};
+    b2ContactResult* contacts{nullptr};
+};
 
-    if (c->m_next)
-    {
-        c->m_next->m_prev = c->m_prev;
-    }
-
-    if (c == m_contactList)
-    {
-        m_contactList = c->m_next;
-    }
-
-    // Call the factory.
-    b2Contact::Destroy(c, &m_blockAllocator);
-    --m_contactCount;
+bool b2BVHManager::ContactTest(b2Manifold* worldManifold, b2InscribedSpheres* inscribedSpheres)
+{
+    b2BVHManagerActiveCollideWrapper wrapper;
+    wrapper.manager = this;
+    wrapper.manifold = worldManifold;
+    wrapper.inscribedSpheres = inscribedSpheres;
+    return m_broadPhase->Collide(&wrapper);
 }
 
-void b2BVHManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
+bool b2BVHManager::ContactTest(b2ContactResult* contacts, b2InscribedSpheres* inscribedSpheres)
 {
-    b2FixtureProxy* proxyA = (b2FixtureProxy*)proxyUserDataA;
-    b2FixtureProxy* proxyB = (b2FixtureProxy*)proxyUserDataB;
+    b2BVHManagerActiveCollideWrapper wrapper;
+    wrapper.manager = this;
+    wrapper.contacts = contacts;
+    wrapper.inscribedSpheres = inscribedSpheres;
+    if (contacts)
+    {
+        b2Manifold manifold;
+        wrapper.manifold = &manifold;
+    }
+    return m_broadPhase->Collide(&wrapper);
+}
 
+struct b2BVHManagerActiveCollideWrapper2
+{
+    bool CollideCallback(int proxyIdA, int proxyIdB)
+    {
+        b2FixtureProxy* proxyA = (b2FixtureProxy*)broadPhaseA->GetUserData(proxyIdA);
+        b2FixtureProxy* proxyB = (b2FixtureProxy*)broadPhaseB->GetUserData(proxyIdB);
+        return CollisionResult(proxyA, proxyB, manager, manifold, contacts, inscribedSpheres);
+    }
+    b2BVHManager *manager{nullptr};
+    const b2BroadPhase* broadPhaseA{nullptr};
+    const b2BroadPhase* broadPhaseB{nullptr};
+    b2Manifold* manifold{nullptr};
+    b2InscribedSpheres* inscribedSpheres{nullptr};
+    b2ContactResult* contacts{nullptr};
+};
+
+bool b2BVHManager::ContactTest(b2BVHManager *manager, b2Manifold* worldManifold, b2InscribedSpheres* inscribedSpheres)
+{
+    if (ContactTest(worldManifold, inscribedSpheres)) // self one
+        return true;
+    if (manager->ContactTest(worldManifold, inscribedSpheres)) // self two 
+        return true;
+    b2BVHManagerActiveCollideWrapper2 query;
+    query.manager = this;
+    query.broadPhaseA = GetBroadPhase();
+    query.broadPhaseB = manager->GetBroadPhase();
+    query.manifold = worldManifold;
+    query.inscribedSpheres = inscribedSpheres;
+    return m_broadPhase->Collide(&query, manager->GetBroadPhase());
+}
+
+bool b2BVHManager::ContactTest(b2BVHManager *manager, b2ContactResult* contacts, b2InscribedSpheres* inscribedSpheres)
+{
+    if (ContactTest(contacts, inscribedSpheres)) // self one
+        return true;
+    if (manager->ContactTest(contacts, inscribedSpheres)) // self two 
+        return true;
+    b2BVHManagerActiveCollideWrapper2 query;
+    query.manager = this;
+    query.broadPhaseA = GetBroadPhase();
+    query.broadPhaseB = manager->GetBroadPhase();
+    query.contacts = contacts;
+    query.inscribedSpheres = inscribedSpheres;
+    if (contacts)
+    {
+        b2Manifold manifold;
+        query.manifold = &manifold;
+    }
+    return m_broadPhase->Collide(&query, manager->GetBroadPhase());
+}
+
+bool DistanceResult(const b2FixtureProxy* proxyA, const b2FixtureProxy* proxyB,
+                     b2BVHManager* manager,
+                     b2Manifold* manifold,
+                     b2ContactResult* contacts)
+{
     b2Fixture* fixtureA = proxyA->fixture;
     b2Fixture* fixtureB = proxyB->fixture;
 
@@ -670,150 +600,79 @@ void b2BVHManager::AddPair(void* proxyUserDataA, void* proxyUserDataB)
 
     // Are the fixtures on the same body?
     if (bodyA == bodyB)
-        return;
+        return true;
 
     if (!bodyA->IsEnabled() || !bodyB->IsEnabled())
-        return;
+        return true;
 
     // Does a joint override collision? Is at least one body dynamic?
     if (!bodyB->ShouldCollide(bodyA))
-        return;
+        return true;
 
     // Check user filtering.
-    if (m_contactFilter && !m_contactFilter->ShouldCollide(fixtureA, fixtureB))
-        return;
+    if (manager->GetContactFilter() && !manager->GetContactFilter()->ShouldCollide(fixtureA, fixtureB))
+        return true;
 
-    if (!b2TestOverlap(proxyA->aabb, proxyB->aabb))
-        return;
-
-    // Call the factory.
-    b2Contact* c = b2Contact::Create(fixtureA, fixtureB, &m_blockAllocator);
-    if (!c)
-        return;
-
-    // Insert into the world.
-    c->m_prev = nullptr;
-    c->m_next = m_contactList;
-    if (m_contactList != nullptr)
-        m_contactList->m_prev = c;
-    m_contactList = c;
-
-    ++m_contactCount;
-}
-
-b2Scalar b2BVHManager::DistanceTest(b2Manifold* worldManifold)
-{
-    b2Scalar distance = b2_maxFloat;
-    m_broadPhase->UpdateDistancePairs(this);
-    while (m_contactList)
+    const b2Transform& xfA = fixtureA->GetGlobalTransform();
+    const b2Transform& xfB = fixtureB->GetGlobalTransform();       
+    bool collision = b2CollideShapes(manifold, fixtureA->GetShape(), xfA, fixtureB->GetShape(), xfB, false);
+    if (collision && manifold)
     {
-        b2Manifold temp;
-        CalculateDistanceResult(m_contactList, &temp);
-        if (temp.separation < distance)
+        if (contacts)
         {
-            distance = temp.separation;
-            if (worldManifold)
-                *worldManifold = temp;
+            contacts->names[0] = bodyA->GetName();
+            contacts->names[1] = bodyB->GetName();
+            contacts->shape_id[0] = fixtureA->GetUserData().pointer;
+            contacts->shape_id[1] = fixtureB->GetUserData().pointer;
+            contacts->transforms[0] = xfA;
+            contacts->transforms[1] = xfB;
+            contacts->normal = manifold->normal;
+            contacts->separation = manifold->separation;
+            contacts->points[0] = manifold->point - manifold->separation * manifold->normal;
+            contacts->points[1] = manifold->point;
+            contacts->local_points[0] = b2MulT(xfA.q, contacts->points[0] - xfA.p);
+            contacts->local_points[1] = b2MulT(xfB.q, contacts->points[1] - xfB.p);
         }
-        DestroyContact(m_contactList);
     }
-
-    return distance;
+    return !collision;
 }
 
-b2Scalar b2BVHManager::DistanceTest(b2ContactResult* contacts)
+/// Self collision test.
+struct b2BVHManagerActiveDistanceWrapper
 {
-    b2Scalar distance = b2_maxFloat;
-    m_broadPhase->UpdateDistancePairs(this);
-    while (m_contactList)
+    bool Distance(void* proxyUserDataA, void* proxyUserDataB, b2Scalar &dist)
     {
-        b2ContactResult temp;
-        CalculateDistanceResult(m_contactList, &temp);
-        if (temp.separation < distance)
-        {
-            distance = temp.separation;
-            if (contacts)
-                *contacts = temp;
-        }
-        DestroyContact(m_contactList);
+        b2FixtureProxy* proxyA = (b2FixtureProxy*)proxyUserDataA;
+        b2FixtureProxy* proxyB = (b2FixtureProxy*)proxyUserDataB;
+        bool separation = DistanceResult(proxyA, proxyB, manager, manifold, contacts);
+        if (manifold->separation < dist)
+            dist = manifold->separation;
+        return separation;
     }
+    b2BVHManager* manager;
+    b2Manifold* manifold{nullptr};
+    b2ContactResult* contacts{nullptr};
+};
 
-    return distance;
+bool b2BVHManager::DistanceTest(b2Scalar &dist, b2Manifold* worldManifold)
+{
+    b2BVHManagerActiveDistanceWrapper wrapper;
+    wrapper.manager = this;
+    wrapper.manifold = worldManifold;
+    if (!worldManifold)
+    {
+        b2Manifold manifold;
+        wrapper.manifold = &manifold;
+    }
+    return m_broadPhase->Distance(&wrapper, dist);
 }
 
-void b2BVHManager::CalculateDistanceResult(b2Contact* c, b2Manifold* worldManifold) const
+bool b2BVHManager::DistanceTest(b2Scalar &dist, b2ContactResult* contacts)
 {
-    b2Fixture* fixtureA = c->GetFixtureA();
-    b2Fixture* fixtureB = c->GetFixtureB();
-    b2Body* bodyA = fixtureA->GetBody();
-    b2Body* bodyB = fixtureB->GetBody();
-    const b2Transform& xfA = bodyA->GetTransform();
-    const b2Transform& xfB = bodyB->GetTransform();
-    c->Evaluate(worldManifold, xfA, xfB, false);
-}
-
-void b2BVHManager::CalculateDistanceResult(b2Contact* c, b2ContactResult* contacts) const
-{
-    b2Fixture* fixtureA = c->GetFixtureA();
-    b2Fixture* fixtureB = c->GetFixtureB();
-    b2Body* bodyA = fixtureA->GetBody();
-    b2Body* bodyB = fixtureB->GetBody();
-    const b2Transform& xfA = bodyA->GetTransform();
-    const b2Transform& xfB = bodyB->GetTransform();
-    b2Manifold worldManifold;
-    c->Evaluate(&worldManifold, xfA, xfB, false);
-
-    contacts->names[0] = bodyA->GetName();
-    contacts->names[1] = bodyB->GetName();
-    contacts->shape_id[0] = fixtureA->GetUserData().pointer;
-    contacts->shape_id[1] = fixtureB->GetUserData().pointer;
-    contacts->transforms[0] = xfA;
-    contacts->transforms[1] = xfB;
-    contacts->normal = worldManifold.normal;
-    contacts->separation = worldManifold.separation;
-    contacts->points[0] = worldManifold.point - worldManifold.separation * worldManifold.normal;
-    contacts->points[1] = worldManifold.point;
-    contacts->local_points[0] = b2MulT(xfA.q, contacts->points[0] - xfA.p);
-    contacts->local_points[1] = b2MulT(xfB.q, contacts->points[1] - xfB.p);
-}
-
-void b2BVHManager::AddPairDistance(void* proxyUserDataA, void* proxyUserDataB)
-{
-    b2FixtureProxy* proxyA = (b2FixtureProxy*)proxyUserDataA;
-    b2FixtureProxy* proxyB = (b2FixtureProxy*)proxyUserDataB;
-
-    b2Fixture* fixtureA = proxyA->fixture;
-    b2Fixture* fixtureB = proxyB->fixture;
-
-    b2Body* bodyA = fixtureA->GetBody();
-    b2Body* bodyB = fixtureB->GetBody();
-
-    // Are the fixtures on the same body?
-    if (bodyA == bodyB)
-        return;
-
-    if (!bodyA->IsEnabled() || !bodyB->IsEnabled())
-        return;
-
-    // Does a joint override collision? Is at least one body dynamic?
-    if (!bodyB->ShouldCollide(bodyA))
-        return;
-
-    // Check user filtering.
-    if (m_contactFilter && !m_contactFilter->ShouldCollide(fixtureA, fixtureB))
-        return;
-
-    // Call the factory.
-    b2Contact* c = b2Contact::Create(fixtureA, fixtureB, &m_blockAllocator);
-    if (!c)
-        return;
-
-    // Insert into the world.
-    c->m_prev = nullptr;
-    c->m_next = m_contactList;
-    if (m_contactList != nullptr)
-        m_contactList->m_prev = c;
-    m_contactList = c;
-
-    ++m_contactCount;
+    b2BVHManagerActiveDistanceWrapper wrapper;
+    wrapper.manager = this;
+    wrapper.contacts = contacts;
+    b2Manifold manifold;
+    wrapper.manifold = &manifold;
+    return m_broadPhase->Distance(&wrapper, dist);
 }

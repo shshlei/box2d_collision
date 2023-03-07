@@ -24,15 +24,14 @@
 #define B2_STACK_ALLOCATOR_H
 
 #include "b2_api.h"
-#include "b2_settings.h"
 
-const int32 b2_stackSize = 100 * 1024;	// 100k
-const int32 b2_maxStackEntries = 32;
+const int b2_stackSize = 100 * 1024;	// 100k
+const int b2_maxStackEntries = 32;
 
 struct B2_API b2StackEntry
 {
     char* data;
-    int32 size;
+    int size;
     bool usedMalloc;
 };
 
@@ -45,21 +44,21 @@ public:
     b2StackAllocator();
     ~b2StackAllocator();
 
-    void* Allocate(int32 size);
+    void* Allocate(int size);
     void Free(void* p);
 
-    int32 GetMaxAllocation() const;
+    int GetMaxAllocation() const;
 
 private:
 
     char m_data[b2_stackSize];
-    int32 m_index;
+    int m_index;
 
-    int32 m_allocation;
-    int32 m_maxAllocation;
+    int m_allocation;
+    int m_maxAllocation;
 
     b2StackEntry m_entries[b2_maxStackEntries];
-    int32 m_entryCount;
+    int m_entryCount;
 };
 
 #endif

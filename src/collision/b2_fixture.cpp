@@ -23,11 +23,12 @@
 #include "box2d_collision/b2_fixture.h"
 #include "box2d_collision/b2_block_allocator.h"
 #include "box2d_collision/b2_broad_phase.h"
-#include "box2d_collision/b2_circle_shape.h"
-#include "box2d_collision/b2_polygon_shape.h"
-#include "box2d_collision/b2_ellipse_shape.h"
+#include "box2d_collision/b2_shape_circle.h"
+#include "box2d_collision/b2_shape_ellipse.h"
+#include "box2d_collision/b2_shape_capsule.h"
+#include "box2d_collision/b2_shape_rectangle.h"
+#include "box2d_collision/b2_shape_polygon.h"
 #include "box2d_collision/b2_collision.h"
-#include "box2d_collision/b2_contact.h"
 
 b2Fixture::b2Fixture()
 {
@@ -48,6 +49,9 @@ void b2Fixture::Create(b2BlockAllocator* allocator, b2Body* body, const b2Fixtur
 
     m_shape = def->shape->Clone(allocator);
 
+    m_xf = def->xf;
+    m_identity = m_xf.IsIdentity();
+
     // Reserve proxy space
     m_proxies = (b2FixtureProxy*)allocator->Allocate(sizeof(b2FixtureProxy));
     m_proxies->fixture = nullptr;
@@ -64,49 +68,68 @@ void b2Fixture::Destroy(b2BlockAllocator* allocator)
     switch (m_shape->m_type)
     {
         case b2Shape::e_circle:
-            {
-                b2CircleShape* s = (b2CircleShape*)m_shape;
-                s->~b2CircleShape();
-                allocator->Free(s, sizeof(b2CircleShape));
-            }
-            break;
-
-        case b2Shape::e_polygon:
-            {
-                b2PolygonShape* s = (b2PolygonShape*)m_shape;
-                s->~b2PolygonShape();
-                allocator->Free(s, sizeof(b2PolygonShape));
-            }
-            break;
+        {
+            b2CircleShape* s = (b2CircleShape*)m_shape;
+            s->~b2CircleShape();
+            allocator->Free(s, sizeof(b2CircleShape));
+        }
+        break;
 
         case b2Shape::e_ellipse:
-            {
-                b2EllipseShape* s = (b2EllipseShape*)m_shape;
-                s->~b2EllipseShape();
-                allocator->Free(s, sizeof(b2EllipseShape));
-            }
-            break;
+        {
+            b2EllipseShape* s = (b2EllipseShape*)m_shape;
+            s->~b2EllipseShape();
+            allocator->Free(s, sizeof(b2EllipseShape));
+        }
+        break;
+
+        case b2Shape::e_capsule:
+        {
+            b2CapsuleShape* s = (b2CapsuleShape*)m_shape;
+            s->~b2CapsuleShape();
+            allocator->Free(s, sizeof(b2CapsuleShape));
+        }
+        break;
+
+        case b2Shape::e_rectangle:
+        {
+            b2RectangleShape* s = (b2RectangleShape*)m_shape;
+            s->~b2RectangleShape();
+            allocator->Free(s, sizeof(b2RectangleShape));
+        }
+        break;
+
+        case b2Shape::e_polygon:
+        {
+            b2PolygonShape* s = (b2PolygonShape*)m_shape;
+            s->~b2PolygonShape();
+            allocator->Free(s, sizeof(b2PolygonShape));
+        }
+        break;
 
         default:
-            b2Assert(false);
-            break;
+        b2Assert(false);
+        break;
     }
 
     m_shape = nullptr;
 }
 
-void b2Fixture::CreateProxies(b2BroadPhase* broadPhase, const b2Transform& xf, bool extend)
+void b2Fixture::CreateProxies(b2BroadPhase* broadPhase, const b2Transform& xf, bool active)
 {
     b2FixtureProxy* proxy = m_proxies;
-    m_shape->ComputeAABB(&proxy->aabb, xf);
-    proxy->proxyId = broadPhase->CreateProxy(proxy->aabb, proxy, extend);
+    proxy->xf = xf;
+    if (!m_identity)
+        proxy->xf = b2Mul(xf, m_xf);
+    m_shape->ComputeAABB(&proxy->aabb, proxy->xf);
+    proxy->proxyId = broadPhase->CreateProxy(proxy->aabb, proxy, active);
     proxy->fixture = this;
 }
 
-void b2Fixture::UpdateProxies(b2BroadPhase* broadPhase, bool extend)
+void b2Fixture::UpdateProxies(b2BroadPhase* broadPhase, bool active)
 {
     b2FixtureProxy* proxy = m_proxies;
-    broadPhase->UpdateProxy(proxy->proxyId, extend);
+    broadPhase->UpdateProxy(proxy->proxyId, active);
 }
 
 void b2Fixture::DestroyProxies(b2BroadPhase* broadPhase)
@@ -117,25 +140,12 @@ void b2Fixture::DestroyProxies(b2BroadPhase* broadPhase)
     proxy->proxyId = b2BroadPhase::e_nullProxy;
 }
 
-void b2Fixture::Synchronize(b2BroadPhase* broadPhase, const b2Transform& transform1, const b2Transform& transform2)
+void b2Fixture::Update(b2BroadPhase* broadPhase, const b2Transform& xf)
 {
     b2FixtureProxy* proxy = m_proxies;
-
-    // Compute an AABB that covers the swept shape (may miss some rotation effect).
-    b2AABB aabb1, aabb2;
-    m_shape->ComputeAABB(&aabb1, transform1);
-    m_shape->ComputeAABB(&aabb2, transform2);
-
-    proxy->aabb.Combine(aabb1, aabb2);
-
-    b2Vec2 displacement = aabb2.GetCenter() - aabb1.GetCenter();
-
-    broadPhase->MoveProxy(proxy->proxyId, proxy->aabb, displacement);
-}
-
-void b2Fixture::Update(b2BroadPhase* broadPhase, const b2Transform& transform)
-{
-    b2FixtureProxy* proxy = m_proxies;
-    m_shape->ComputeAABB(&proxy->aabb, transform);
+    proxy->xf = xf;
+    if (!m_identity)
+        proxy->xf = b2Mul(xf, m_xf);
+    m_shape->ComputeAABB(&proxy->aabb, proxy->xf);
     broadPhase->UpdateProxy(proxy->proxyId, proxy->aabb);
 }

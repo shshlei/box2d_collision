@@ -24,10 +24,7 @@
 #define B2_MATH_H
 
 #include <math.h>
-
-#include "b2_api.h"
-#include "b2_scalar.h"
-#include "b2_settings.h"
+#include "b2_common.h"
 
 /// This function is used to ensure that a b2Scalar point number is not a NaN or infinity.
 B2_FORCE_INLINE bool b2IsValid(b2Scalar x)
@@ -59,13 +56,24 @@ struct B2_API b2Vec2
     }
 
     /// Read from and indexed element.
-    B2_FORCE_INLINE b2Scalar operator () (int32 i) const
+    B2_FORCE_INLINE b2Scalar operator () (int i) const
     {
         return (&x)[i];
     }
 
     /// Write to an indexed element.
-    B2_FORCE_INLINE b2Scalar& operator () (int32 i)
+    B2_FORCE_INLINE b2Scalar& operator () (int i)
+    {
+        return (&x)[i];
+    }
+
+    B2_FORCE_INLINE b2Scalar operator [] (int i) const
+    {
+        return (&x)[i];
+    }
+
+    /// Write to an indexed element.
+    B2_FORCE_INLINE b2Scalar& operator [] (int i)
     {
         return (&x)[i];
     }
@@ -112,19 +120,40 @@ struct B2_API b2Vec2
         return x * x + y * y;
     }
 
+    /// Get the norm of this vector (the norm).
+    B2_FORCE_INLINE b2Scalar Norm() const
+    {
+        return b2Sqrt(x * x + y * y);
+    }
+
+    /// Get the norm squared. For performance, use this instead of
+    /// b2Vec2::Length (if possible).
+    B2_FORCE_INLINE b2Scalar NormSquared() const
+    {
+        return x * x + y * y;
+    }
+
     /// Convert this vector into a unit vector. Returns the length.
     B2_FORCE_INLINE b2Scalar Normalize()
     {
-        b2Scalar length = Length();
-        if (length < b2_epsilon)
-        {
+        b2Scalar length = LengthSquared();
+        if (length < b2_epsilon2)
             return b2Scalar(0.0);
-        }
-        b2Scalar invLength = b2Scalar(1.0) / length;
+        b2Scalar invLength = b2Scalar(1.0) / b2Sqrt(length);
         x *= invLength;
         y *= invLength;
-
         return length;
+    }
+
+    B2_FORCE_INLINE b2Vec2 Normalized()
+    {
+        b2Vec2 out;
+        b2Scalar length = LengthSquared();
+        if (length < b2_epsilon2)
+            return out;
+        b2Scalar invLength = b2Scalar(1.0) / b2Sqrt(length);
+        out.Set(x * invLength, y * invLength);
+        return out;
     }
 
     /// Does this vector contain finite coordinates?
@@ -139,7 +168,13 @@ struct B2_API b2Vec2
         return b2Vec2(-y, x);
     }
 
-    b2Scalar x, y;
+    /// Does this vector is the zero vector?
+    bool IsZero() const;
+
+    /// Does this vector is equal to v?
+    bool IsApprox(const b2Vec2& v, b2Scalar tol) const;
+
+    b2Scalar x{0.0}, y{0.0};
 };
 
 /// A 2D column vector with 3 elements.
@@ -185,7 +220,17 @@ struct B2_API b2Vec3
         x *= s; y *= s; z *= s;
     }
 
-    b2Scalar x, y, z;
+    /// Divide this vector by a scalar.
+    B2_FORCE_INLINE void operator /= (b2Scalar s)
+    {
+        x /= s; y /= s; z /= s;
+    }
+
+    bool IsZero() const;
+
+    bool IsApprox(const b2Vec3& v, b2Scalar tol) const;
+
+    b2Scalar x{0.0}, y{0.0}, z{0.0};
 };
 
 /// A 2-by-2 matrix. Stored in column-major order.
@@ -208,6 +253,8 @@ struct B2_API b2Mat22
         ey.x = a12; ey.y = a22;
     }
 
+    B2_FORCE_INLINE b2Mat22(const b2Mat22& v) : ex(v.ex), ey(v.ey) {}
+
     /// Initialize this matrix using columns.
     B2_FORCE_INLINE void Set(const b2Vec2& c1, const b2Vec2& c2)
     {
@@ -229,15 +276,18 @@ struct B2_API b2Mat22
         ex.y = b2Scalar(0.0); ey.y = b2Scalar(0.0);
     }
 
+    B2_FORCE_INLINE void operator = (const b2Mat22& v)
+    {
+        ex = v.ex; ey = v.ey;
+    }
+
     B2_FORCE_INLINE b2Mat22 GetInverse() const
     {
         b2Scalar a = ex.x, b = ey.x, c = ex.y, d = ey.y;
         b2Mat22 B;
         b2Scalar det = a * d - b * c;
         if (det != b2Scalar(0.0))
-        {
             det = b2Scalar(1.0) / det;
-        }
         B.ex.x =  det * d;	B.ey.x = -det * b;
         B.ex.y = -det * c;	B.ey.y =  det * a;
         return B;
@@ -250,14 +300,14 @@ struct B2_API b2Mat22
         b2Scalar a11 = ex.x, a12 = ey.x, a21 = ex.y, a22 = ey.y;
         b2Scalar det = a11 * a22 - a12 * a21;
         if (det != b2Scalar(0.0))
-        {
             det = b2Scalar(1.0) / det;
-        }
         b2Vec2 x;
         x.x = det * (a22 * b.x - a12 * b.y);
         x.y = det * (a11 * b.y - a21 * b.x);
         return x;
     }
+
+    bool IsZero() const;
 
     b2Vec2 ex, ey;
 };
@@ -285,12 +335,19 @@ struct B2_API b2Mat33
         ez.x = a13; ez.y = a23; ez.z = a33;
     }
 
+    B2_FORCE_INLINE b2Mat33(const b2Mat33& v) : ex(v.ex), ey(v.ey), ez(v.ez) {} 
+
     /// Set this matrix to all zeros.
     B2_FORCE_INLINE void SetZero()
     {
         ex.SetZero();
         ey.SetZero();
         ez.SetZero();
+    }
+
+    B2_FORCE_INLINE void operator = (const b2Mat33& v)
+    {
+        ex = v.ex; ey = v.ey; ez = v.ez;
     }
 
     /// Solve A * x = b, where b is a column vector. This is more efficient
@@ -309,6 +366,8 @@ struct B2_API b2Mat33
     /// Get the symmetric inverse of this matrix as a 3-by-3.
     /// Returns the zero matrix if singular.
     B2_FORCE_INLINE void GetSymInverse33(b2Mat33* M) const;
+
+    bool IsZero() const;
 
     b2Vec3 ex, ey, ez;
 };
@@ -341,6 +400,8 @@ struct B2_API b2Rot
         c = b2Scalar(1.0);
     }
 
+    B2_FORCE_INLINE b2Rot(const b2Rot& v) : s(v.s), c(v.c) {} 
+
     /// Get the angle in radians
     B2_FORCE_INLINE b2Scalar GetAngle() const
     {
@@ -359,8 +420,15 @@ struct B2_API b2Rot
         return b2Vec2(-s, c);
     }
 
+    B2_FORCE_INLINE void operator = (const b2Rot& v)
+    {
+        s = v.s; c = v.c;;
+    }
+
+    bool IsIdentity() const;
+
     /// Sine and cosine
-    b2Scalar s, c;
+    b2Scalar s{0.0}, c{1.0};
 };
 
 /// A transform contains translation and rotation. It is used to represent
@@ -371,13 +439,18 @@ struct B2_API b2Transform
     B2_FORCE_INLINE b2Transform() = default;
 
     /// Initialize using a position vector and a rotation.
-    B2_FORCE_INLINE b2Transform(const b2Vec2& position, b2Scalar angle) : p(position)
+    B2_FORCE_INLINE b2Transform(const b2Vec2& position, b2Scalar angle) : p(position), q(angle)
     {
-        q.Set(angle);
+    }
+
+    B2_FORCE_INLINE b2Transform(b2Scalar x, b2Scalar y, b2Scalar angle) : p(x, y), q(angle)
+    {
     }
 
     /// Initialize using a position vector and a rotation.
     B2_FORCE_INLINE b2Transform(const b2Vec2& position, const b2Rot& rotation) : p(position), q(rotation) {}
+
+    B2_FORCE_INLINE b2Transform(const b2Transform& v) : p(v.p), q(v.q) {} 
 
     /// Set this to the identity transform.
     B2_FORCE_INLINE void SetIdentity()
@@ -393,38 +466,29 @@ struct B2_API b2Transform
         q.Set(angle);
     }
 
+    B2_FORCE_INLINE void operator = (const b2Transform& v)
+    {
+        p = v.p; q = v.q;;
+    }
+
+    B2_FORCE_INLINE b2Vec2 GetPosition() const
+    {
+        return p;
+    }
+
+    B2_FORCE_INLINE b2Scalar GetAngle() const
+    {
+        return q.GetAngle();
+    }
+
+    bool IsIdentity() const;
+
     b2Vec2 p;
     b2Rot q;
 };
 
-/// This describes the motion of a body/shape for TOI computation.
-/// Shapes are defined with respect to the body origin, which may
-/// no coincide with the center of mass. However, to support dynamics
-/// we must interpolate the center of mass position.
-struct B2_API b2Sweep
-{
-    B2_FORCE_INLINE b2Sweep() = default;
-
-    /// Get the interpolated transform at a specific time.
-    /// @param transform the output transform
-    /// @param beta is a factor in [0,1], where 0 indicates alpha0.
-    B2_FORCE_INLINE void GetTransform(b2Transform* transform, b2Scalar beta) const;
-
-    /// Advance the sweep forward, yielding a new initial state.
-    /// @param alpha the new initial time.
-    B2_FORCE_INLINE void Advance(b2Scalar alpha);
-
-    /// Normalize the angles.
-    B2_FORCE_INLINE void Normalize();
-
-    b2Vec2 localCenter;	///< local center of mass position
-    b2Vec2 c0, c;		///< center world positions
-    b2Scalar a0, a;		///< world angles
-
-    /// Fraction of the current time step in the range [0,1]
-    /// c0 and a0 are the positions at alpha0.
-    b2Scalar alpha0;
-};
+/// An axis aligned bounding box.
+struct B2_API b2AABB;
 
 /// Useful constant
 extern B2_API const b2Vec2 b2Vec2_zero;
@@ -664,7 +728,7 @@ B2_FORCE_INLINE b2Transform b2MulT(const b2Transform& A, const b2Transform& B)
     return C;
 }
 
-    template <typename T>
+template <typename T>
 B2_FORCE_INLINE T b2Abs(T a)
 {
     return a > T(0) ? a : -a;
@@ -680,7 +744,7 @@ B2_FORCE_INLINE b2Mat22 b2Abs(const b2Mat22& A)
     return b2Mat22(b2Abs(A.ex), b2Abs(A.ey));
 }
 
-    template <typename T>
+template <typename T>
 B2_FORCE_INLINE T b2Min(T a, T b)
 {
     return a < b ? a : b;
@@ -691,7 +755,7 @@ B2_FORCE_INLINE b2Vec2 b2Min(const b2Vec2& a, const b2Vec2& b)
     return b2Vec2(b2Min(a.x, b.x), b2Min(a.y, b.y));
 }
 
-    template <typename T>
+template <typename T>
 B2_FORCE_INLINE T b2Max(T a, T b)
 {
     return a > b ? a : b;
@@ -702,7 +766,7 @@ B2_FORCE_INLINE b2Vec2 b2Max(const b2Vec2& a, const b2Vec2& b)
     return b2Vec2(b2Max(a.x, b.x), b2Max(a.y, b.y));
 }
 
-    template <typename T>
+template <typename T>
 B2_FORCE_INLINE T b2Clamp(T a, T low, T high)
 {
     return b2Max(low, b2Min(a, high));
@@ -718,7 +782,7 @@ B2_FORCE_INLINE b2Vec2 b2Clamp(const b2Vec2& a, const b2Vec2& low, const b2Vec2&
 /// that recursively "folds" the upper bits into the lower bits. This process yields a bit vector with
 /// the same most significant 1 as x, but all 1's below it. Adding 1 to that value yields the next
 /// largest power of 2. For a 32-bit value:"
-B2_FORCE_INLINE uint32 b2NextPowerOfTwo(uint32 x)
+B2_FORCE_INLINE unsigned int b2NextPowerOfTwo(unsigned int x)
 {
     x |= (x >> 1);
     x |= (x >> 2);
@@ -728,39 +792,391 @@ B2_FORCE_INLINE uint32 b2NextPowerOfTwo(uint32 x)
     return x + 1;
 }
 
-B2_FORCE_INLINE bool b2IsPowerOfTwo(uint32 x)
+B2_FORCE_INLINE bool b2IsPowerOfTwo(unsigned int x)
 {
     bool result = x > 0 && (x & (x - 1)) == 0;
     return result;
 }
 
-// https://fgiesen.wordpress.com/2012/08/15/linear-interpolation-past-present-and-future/
-B2_FORCE_INLINE void b2Sweep::GetTransform(b2Transform* xf, b2Scalar beta) const
+struct B2_API b2AABB
 {
-    xf->p = (b2Scalar(1.0) - beta) * c0 + beta * c;
-    b2Scalar angle = (b2Scalar(1.0) - beta) * a0 + beta * a;
-    xf->q.Set(angle);
+    b2AABB()
+    {
+        lowerBound.Set(b2_maxFloat, b2_maxFloat);
+        upperBound.Set(-b2_maxFloat, -b2_maxFloat);
+    }
 
-    // Shift to origin
-    xf->p -= b2Mul(xf->q, localCenter);
+    /// @brief Creating an b2AABB at position v with zero size
+    b2AABB(const b2Vec2& v) : lowerBound(v), upperBound(v)
+    {
+    }
+
+    /// @brief Creating an b2AABB with two endpoints a and b
+    b2AABB(const b2Vec2& a, const b2Vec2&b) : lowerBound(b2Min(a, b)), upperBound(b2Max(a, b))
+    {
+    }
+
+    /// @brief Creating an b2AABB centered as core and is of half-dimension delta
+    b2AABB(const b2AABB& core, const b2Vec2& delta) : lowerBound(core.lowerBound - delta), upperBound(core.upperBound + delta)
+    {
+    }
+
+    B2_FORCE_INLINE b2AABB(const b2AABB& v) : lowerBound(v.lowerBound), upperBound(v.upperBound) {} 
+
+    B2_FORCE_INLINE void operator = (const b2AABB& v)
+    {
+        lowerBound = v.lowerBound;
+        upperBound = v.upperBound;
+    }
+
+    /// Verify that the bounds are sorted.
+    bool IsValid() const;
+
+    B2_FORCE_INLINE void SetMin(b2Scalar min)
+    {
+        lowerBound.Set(min, min);
+    }
+
+    B2_FORCE_INLINE void SetMin(b2Scalar minx, b2Scalar miny)
+    {
+        lowerBound.Set(minx, miny);
+    }
+
+    B2_FORCE_INLINE void SetMax(b2Scalar max)
+    {
+        upperBound.Set(max, max);
+    }
+
+    B2_FORCE_INLINE void SetMax(b2Scalar maxx, b2Scalar maxy)
+    {
+        upperBound.Set(maxx, maxy);
+    }
+
+    /// Get the center of the AABB.
+    B2_FORCE_INLINE b2Vec2 GetCenter() const
+    {
+        return b2Scalar(0.5) * (lowerBound + upperBound);
+    }
+
+    /// Get the extents of the AABB (half-widths).
+    B2_FORCE_INLINE b2Vec2 GetExtents() const
+    {
+        return b2Scalar(0.5) * (upperBound - lowerBound);
+    }
+
+    /// @brief Width of the b2AABB
+    B2_FORCE_INLINE b2Scalar Width() const
+    {
+        return upperBound.x - lowerBound.x;
+    }
+
+    /// @brief Height of the b2AABB
+    B2_FORCE_INLINE b2Scalar Height() const
+    {
+        return upperBound.y - lowerBound.y;
+    }
+
+    /// @brief Area of the b2AABB
+    B2_FORCE_INLINE b2Scalar Area() const
+    {
+        return Width() * Height();
+    }
+
+    /// @brief Size of the b2AABB 
+    B2_FORCE_INLINE b2Scalar Size() const
+    {
+        return (upperBound - lowerBound).LengthSquared();
+    }
+
+    /// @brief Radius of the b2AABB
+    B2_FORCE_INLINE b2Scalar Radius() const
+    {
+        return 0.5 * (upperBound - lowerBound).Length();
+    }
+
+    /// Get the perimeter length
+    B2_FORCE_INLINE b2Scalar GetPerimeter() const
+    {
+        return b2Scalar(2.0) * (Width() + Height());
+    }
+
+    /// Combine an AABB into this one.
+    B2_FORCE_INLINE void Combine(const b2AABB& aabb)
+    {
+        lowerBound = b2Min(lowerBound, aabb.lowerBound);
+        upperBound = b2Max(upperBound, aabb.upperBound);
+    }
+
+    /// Combine two AABBs into this one.
+    B2_FORCE_INLINE void Combine(const b2AABB& aabb1, const b2AABB& aabb2)
+    {
+        lowerBound = b2Min(aabb1.lowerBound, aabb2.lowerBound);
+        upperBound = b2Max(aabb1.upperBound, aabb2.upperBound);
+    }
+
+    /// @brief Check whether two b2AABB are Overlap
+    B2_FORCE_INLINE bool Overlap(const b2AABB& other) const
+    {
+        if (lowerBound.x > other.upperBound.x)
+            return false;
+        if (lowerBound.y > other.upperBound.y)
+            return false;
+        if (other.lowerBound.x > upperBound.x)
+            return false;
+        if (other.lowerBound.y > upperBound.y)
+            return false;
+        return true;
+    }
+
+    /// Does this aabb contain the provided AABB.
+    B2_FORCE_INLINE bool Contains(const b2AABB& aabb) const
+    {
+        bool result = true;
+        result = result && lowerBound.x <= aabb.lowerBound.x;
+        result = result && lowerBound.y <= aabb.lowerBound.y;
+        result = result && aabb.upperBound.x <= upperBound.x;
+        result = result && aabb.upperBound.y <= upperBound.y;
+        return result;
+    }
+
+    /// Does this aabb contain the provided point.
+    B2_FORCE_INLINE bool Contains(const b2Vec2& aabb) const
+    {
+        if (aabb.x < lowerBound.x)
+            return false;
+        if (aabb.x > upperBound.x)
+            return false;
+        if (aabb.y < lowerBound.y)
+            return false;
+        if (aabb.y > upperBound.y)
+            return false;
+        return true;
+    }
+
+    /// @brief Check whether two b2AABB are overlapped along specific axis
+    B2_FORCE_INLINE bool AxisOverlap(const b2AABB& other, int axis_id) const
+    {
+        if (lowerBound[axis_id] > other.upperBound[axis_id])
+            return false;
+        if (upperBound[axis_id] < other.lowerBound[axis_id])
+            return false;
+        return true;
+    }
+
+    /// @brief Check whether two b2AABB are Overlap and return the Overlap part
+    B2_FORCE_INLINE bool Overlap(const b2AABB& other, b2AABB& overlap_part) const
+    {
+        if (!Overlap(other))
+            return false;
+        overlap_part.lowerBound = b2Max(lowerBound, other.lowerBound);
+        overlap_part.upperBound = b2Min(upperBound, other.upperBound);
+        return true;
+    }
+
+    /// @brief Merge the b2AABB and a point
+    B2_FORCE_INLINE b2AABB& operator += (const b2Vec2& p)
+    {
+        lowerBound = b2Min(lowerBound, p);
+        upperBound = b2Max(upperBound, p);
+        return *this;
+    }
+
+    /// @brief Merge the b2AABB and another b2AABB
+    B2_FORCE_INLINE b2AABB& operator += (const b2AABB& other)
+    {
+        lowerBound = b2Min(lowerBound, other.lowerBound);
+        upperBound = b2Max(upperBound, other.upperBound);
+        return *this;
+    }
+
+    /// @brief Return the merged b2AABB of current b2AABB and the other one
+    B2_FORCE_INLINE b2AABB operator + (const b2AABB& other) const
+    {
+        b2AABB res(*this);
+        return res += other;
+    }
+
+    /// @brief Distance between two b2AABBs; P and Q, should not be nullptr, return
+    /// the nearest points
+    b2Scalar Distance(const b2AABB& other, b2Vec2* P, b2Vec2* Q) const
+    {
+        b2Scalar result = 0.0;
+        for (int i = 0; i < 2; ++i)
+        {
+            const b2Scalar& amin = lowerBound[i];
+            const b2Scalar& amax = upperBound[i];
+            const b2Scalar& bmin = other.lowerBound[i];
+            const b2Scalar& bmax = other.upperBound[i];
+            if (amin > bmax)
+            {
+                b2Scalar delta = amin - bmax;
+                result += delta * delta;
+                if (P && Q)
+                {
+                    (*P)[i] = amin;
+                    (*Q)[i] = bmax;
+                }
+            }
+            else if (bmin > amax)
+            {
+                b2Scalar delta = bmin - amax;
+                result += delta * delta;
+                if (P && Q)
+                {
+                    (*P)[i] = amax;
+                    (*Q)[i] = bmin;
+                }               
+            }
+            else if (P && Q)
+            {
+                if (bmin >= amin)
+                {
+                    b2Scalar t = 0.5 * (amax + bmin);
+                    (*P)[i] = t;
+                    (*Q)[i] = t;
+                }
+                else
+                {
+                    b2Scalar t = 0.5 * (amin + bmax);
+                    (*P)[i] = t;
+                    (*Q)[i] = t;
+                }
+            }
+        }
+        return b2Sqrt(result);
+    }
+
+    /// @brief Distance between two b2AABBs
+    b2Scalar Distance(const b2AABB& other) const
+    {
+        b2Scalar result = 0.0;
+        for (int i = 0; i < 2; ++i)
+        {
+            const b2Scalar& amin = lowerBound[i];
+            const b2Scalar& amax = upperBound[i];
+            const b2Scalar& bmin = other.lowerBound[i];
+            const b2Scalar& bmax = other.upperBound[i];
+            if (amin > bmax)
+            {
+                b2Scalar delta = amin - bmax;
+                result += delta * delta;
+            }
+            else if (bmin > amax)
+            {
+                b2Scalar delta = bmin - amax;
+                result += delta * delta;
+            }
+        }
+        return b2Sqrt(result);
+    }
+
+    b2Scalar Distance(const b2Vec2& point) const
+    {
+        b2Scalar result = 0.0;
+        for (int i = 0; i < 2; ++i)
+        {
+            const b2Scalar& amin = lowerBound[i];
+            const b2Scalar& amax = upperBound[i];
+            const b2Scalar& bmin = point[i];
+            const b2Scalar& bmax = point[i];
+            if (amin > bmax)
+            {
+                b2Scalar delta = amin - bmax;
+                result += delta * delta;
+            }
+            else if (bmin > amax)
+            {
+                b2Scalar delta = bmin - amax;
+                result += delta * delta;
+            }
+        }
+        return b2Sqrt(result);
+    }
+
+    /// @brief whether two b2AABB are equal
+    B2_FORCE_INLINE bool Equal(const b2AABB& other) const
+    {
+        return lowerBound.IsApprox(other.lowerBound, 100.0 * b2_epsilon) && upperBound.IsApprox(other.upperBound, 100.0 * b2_epsilon);
+    }
+
+    /// @brief expand the half size of the b2AABB by delta, and keep the center unchanged.
+    B2_FORCE_INLINE b2AABB& Expand(const b2Vec2& delta)
+    {
+        lowerBound -= delta;
+        upperBound += delta;
+        return *this;
+    }
+
+    B2_FORCE_INLINE b2AABB Translate(const b2AABB& aabb, const b2Vec2& t)
+    {
+        b2AABB res(aabb);
+        res.lowerBound += t;
+        res.upperBound += t;
+        return res;
+    }
+
+    b2Vec2 lowerBound;	///< the lower vertex
+    b2Vec2 upperBound;	///< the upper vertex
+};
+
+B2_FORCE_INLINE bool b2AABB::IsValid() const
+{
+    b2Vec2 d = upperBound - lowerBound;
+    bool valid = d.x >= b2Scalar(0.0) && d.y >= b2Scalar(0.0);
+    valid = valid && lowerBound.IsValid() && upperBound.IsValid();
+    return valid;
 }
 
-B2_FORCE_INLINE void b2Sweep::Advance(b2Scalar alpha)
+B2_FORCE_INLINE bool b2TestOverlap(const b2AABB& a, const b2AABB& b)
 {
-    b2Assert(alpha0 < b2Scalar(1.0));
-    b2Scalar beta = (alpha - alpha0) / (b2Scalar(1.0) - alpha0);
-    c0 += beta * (c - c0);
-    a0 += beta * (a - a0);
-    alpha0 = alpha;
+    b2Vec2 d1, d2;
+    d1 = b.lowerBound - a.upperBound;
+    d2 = a.lowerBound - b.upperBound;
+    if (d1.x > b2Scalar(0.0) || d1.y > b2Scalar(0.0))
+        return false;
+    if (d2.x > b2Scalar(0.0) || d2.y > b2Scalar(0.0))
+        return false;
+    return true;
 }
 
-/// Normalize an angle in radians to be between -pi and pi
-B2_FORCE_INLINE void b2Sweep::Normalize()
+B2_FORCE_INLINE bool b2Vec2::IsZero() const
 {
-    b2Scalar twoPi = b2Scalar(2.0) * b2_pi;
-    b2Scalar d =  twoPi * floorf(a0 / twoPi);
-    a0 -= d;
-    a -= d;
+    return b2Abs(x) < b2_epsilon && b2Abs(y) < b2_epsilon;
+}
+
+B2_FORCE_INLINE bool b2Vec3::IsZero() const
+{
+    return b2Abs(x) < b2_epsilon && b2Abs(y) < b2_epsilon && b2Abs(z) < b2_epsilon;
+}
+
+B2_FORCE_INLINE bool b2Vec2::IsApprox(const b2Vec2& v, b2Scalar tol) const
+{
+    return b2Abs(x - v.x) < tol && b2Abs(y - v.y) < tol;
+}
+
+B2_FORCE_INLINE bool b2Vec3::IsApprox(const b2Vec3& v, b2Scalar tol) const
+{
+    return b2Abs(x - v.x) < tol && b2Abs(y - v.y) < tol && b2Abs(z - v.z) < tol;
+}
+
+B2_FORCE_INLINE bool b2Mat22::IsZero() const
+{
+    return ex.IsZero() && ey.IsZero();
+}
+
+B2_FORCE_INLINE bool b2Mat33::IsZero() const
+{
+    return ex.IsZero() && ey.IsZero() && ez.IsZero();
+}
+
+B2_FORCE_INLINE bool b2Rot::IsIdentity() const
+{
+    return c > b2Scalar(1.0) - b2_epsilon;
+}
+
+B2_FORCE_INLINE bool b2Transform::IsIdentity() const
+{
+    return p.IsZero() && q.IsIdentity();
 }
 
 #endif

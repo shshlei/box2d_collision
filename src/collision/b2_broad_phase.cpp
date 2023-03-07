@@ -31,83 +31,31 @@ b2BroadPhase::~b2BroadPhase()
 {
 }
 
-int32 b2BroadPhase::CreateProxy(const b2AABB& aabb, void* userData, bool extend)
+int b2BroadPhase::CreateProxy(const b2AABB& aabb, void* userData, bool active)
 {
-    int32 proxyId = m_tree.CreateProxy(aabb, userData, extend);
+    int proxyId = m_tree.CreateProxy(aabb, userData);
     ++m_proxyCount;
-    if (extend)
-    {
-        m_moveBuffer.insert(proxyId);
+    if (active)
         m_activeBuffer.insert(proxyId);
-    }
     return proxyId;
 }
 
-void b2BroadPhase::UpdateProxy(int32 proxyId, bool extend)
+void b2BroadPhase::UpdateProxy(int proxyId, bool active)
 {
-    if (extend)
-    {
-        if (m_tree.UpdateProxy(proxyId, extend))
-            m_moveBuffer.insert(proxyId);
+    if (active)
         m_activeBuffer.insert(proxyId);
-    }
     else
-    {
-        if (m_tree.UpdateProxy(proxyId, extend))
-            m_moveBuffer.erase(proxyId);
         m_activeBuffer.erase(proxyId);
-    }
 }
 
-void b2BroadPhase::DestroyProxy(int32 proxyId)
+void b2BroadPhase::DestroyProxy(int proxyId)
 {
-    m_moveBuffer.erase(proxyId);
     m_activeBuffer.erase(proxyId);
     --m_proxyCount;
     m_tree.DestroyProxy(proxyId);
 }
 
-void b2BroadPhase::MoveProxy(int32 proxyId, const b2AABB& aabb, const b2Vec2& displacement)
+void b2BroadPhase::UpdateProxy(int proxyId, const b2AABB& aabb)
 {
-    if (m_tree.MoveProxy(proxyId, aabb, displacement))
-        m_moveBuffer.insert(proxyId);
-}
-
-void b2BroadPhase::UpdateProxy(int32 proxyId, const b2AABB& aabb)
-{
-    if (m_tree.UpdateProxy(proxyId, aabb))
-        m_moveBuffer.insert(proxyId);
-}
-
-void b2BroadPhase::TouchProxy(int32 proxyId)
-{
-    m_moveBuffer.insert(proxyId);
-}
-
-// This is called from b2DynamicTree::Query when we are gathering pairs.
-bool b2BroadPhase::QueryCallback(int32 proxyId)
-{
-    // A proxy cannot form a pair with itself.
-    if (proxyId == m_queryProxyId)
-        return true;
-
-    if (WasMoved(proxyId) && proxyId > m_queryProxyId)
-        // Both proxies are moving. Avoid duplicate pairs.
-        return true;
-    m_pairBuffer.emplace_back(b2Min(proxyId, m_queryProxyId), b2Max(proxyId, m_queryProxyId));
-    return true;
-}
-
-// This is called from b2DynamicTree::Query when we are gathering pairs.
-bool b2BroadPhase::QueryCallbackDistance(int32 proxyId)
-{
-    // A proxy cannot form a pair with itself.
-    if (proxyId == m_queryProxyId)
-        return true;
-
-    if (IsActive(proxyId) && proxyId > m_queryProxyId)
-        // Both proxies are moving. Avoid duplicate pairs.
-        return true;
-    m_pairBuffer.emplace_back(b2Min(proxyId, m_queryProxyId), b2Max(proxyId, m_queryProxyId));
-    return true;
+    m_tree.UpdateProxy(proxyId, aabb);
 }

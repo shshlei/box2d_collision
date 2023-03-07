@@ -20,55 +20,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#define _CRT_SECURE_NO_WARNINGS
+#include "box2d_collision/b2_shape_circle.h"
+#include "box2d_collision/b2_block_allocator.h"
 
-#include "box2d_collision/b2_settings.h"
-#include <stdio.h>
-#include <stdarg.h>
-#include <stdlib.h>
+#include <new>
 
-b2Version b2_version = {2, 4, 1};
-
-// Memory allocators. Modify these to use your own allocator.
-void* b2Alloc_Default(int32 size)
+b2Shape* b2CircleShape::Clone(b2BlockAllocator* allocator) const
 {
-	return malloc(size);
+    void* mem = allocator->Allocate(sizeof(b2CircleShape));
+    b2CircleShape* clone = new (mem) b2CircleShape;
+    *clone = *this;
+    return clone;
 }
 
-void b2Free_Default(void* mem)
+bool b2CircleShape::TestPoint(const b2Transform& transform, const b2Vec2& p) const
 {
-	free(mem);
+    b2Vec2 d = p - transform.p;
+    return b2Dot(d, d) <= m_radius * m_radius;
 }
 
-// You can modify this to use your logging facility.
-void b2Log_Default(const char* string, va_list args)
+void b2CircleShape::ComputeAABB(b2AABB* aabb, const b2Transform& transform) const
 {
-	vprintf(string, args);
+    b2Vec2 r(m_radius, m_radius);
+    aabb->lowerBound = transform.p - r;
+    aabb->upperBound = transform.p + r;
 }
 
-FILE* b2_dumpFile = nullptr;
-
-void b2OpenDump(const char* fileName)
+bool b2CircleShape::InscribedSphereAtPoint(const b2Vec2& /*inp*/, const b2Vec2& /*bdp*/, const b2Vec2& /*normal*/, b2Vec2& local_center, b2Scalar &radius) const
 {
-	b2Assert(b2_dumpFile == nullptr);
-	b2_dumpFile = fopen(fileName, "w");
+    if (m_radius < b2_epsilon)
+        return false;
+    local_center.SetZero();
+    radius = m_radius;
+    return true;
 }
 
-void b2Dump(const char* string, ...)
+b2Vec2 b2CircleShape::SupportPoint(const b2Vec2& dir) const
 {
-	if (b2_dumpFile == nullptr)
-	{
-		return;
-	}
-
-	va_list args;
-	va_start(args, string);
-	vfprintf(b2_dumpFile, string, args);
-	va_end(args);
-}
-
-void b2CloseDump()
-{
-	fclose(b2_dumpFile);
-	b2_dumpFile = nullptr;
+    return m_radius * dir;
 }

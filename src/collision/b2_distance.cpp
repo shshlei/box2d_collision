@@ -20,695 +20,514 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "box2d_collision/b2_circle_shape.h"
-#include "box2d_collision/b2_polygon_shape.h"
 #include "box2d_collision/b2_distance.h"
 
-// GJK using Voronoi regions (Christer Ericson) and Barycentric coordinates.
-B2_API int32 b2_gjkCalls, b2_gjkIters, b2_gjkMaxIters;
-
-void b2DistanceProxy::Set(const b2Shape* shape)
+namespace
 {
-    switch (shape->GetType())
-    {
-    case b2Shape::e_circle:
-        {
-            const b2CircleShape* circle = static_cast<const b2CircleShape*>(shape);
-            m_vertices = &circle->m_p;
-            m_count = 1;
-            m_radius = circle->m_radius;
-        }
-        break;
-
-    case b2Shape::e_polygon:
-        {
-            const b2PolygonShape* polygon = static_cast<const b2PolygonShape*>(shape);
-            m_vertices = polygon->m_vertices;
-            m_count = polygon->m_count;
-            m_radius = b2Scalar(0.0);
-        }
-        break;
-
-    default:
-        b2Assert(false);
-    }
+bool doSimplex2(const b2Vec2 &a, const b2Vec2 &b, b2Vec2 &dir)
+{
+    b2Vec2 ab = b - a;
+    b2Scalar sgn = b2Cross(b, ab);
+    if (sgn * sgn < ab.LengthSquared() * b.LengthSquared() * b2_epsilon2)
+        return true;
+    if (sgn > b2Scalar(0.0))
+        // Origin is left of ab.
+        dir = b2Cross(b2Scalar(1.0), ab).Normalized();
+    else
+        // Origin is right of ab.
+        dir = b2Cross(ab, b2Scalar(1.0)).Normalized();
+    return false;
 }
 
-void b2DistanceProxy::Set(const b2Vec2* vertices, int32 count, b2Scalar radius)
+bool doSimplex2(b2Simplex &simplex, b2Vec2 &dir)
 {
-    m_vertices = vertices;
-    m_count = count;
-    m_radius = radius;
+    return doSimplex2(simplex.At(1).v, simplex.At(0).v, dir);
 }
 
-struct b2SimplexVertex
+bool doSimplex3(b2Simplex &simplex, b2Vec2 &dir)
 {
-    b2Vec2 wA;		// support point in proxyA
-    b2Vec2 wB;		// support point in proxyB
-    b2Vec2 w;		// wB - wA
-    b2Scalar a;		// barycentric coordinate for closest point
-    int32 indexA;	// wA index
-    int32 indexB;	// wB index
-};
+    const b2Support &a = simplex.At(2), &b = simplex.At(1), &c = simplex.At(0);
 
-struct b2Simplex
+    b2Vec2 ab = b.v - a.v;
+    b2Scalar sgn1 = b2Cross(b.v, ab);
+    if (sgn1 * sgn1 < ab.LengthSquared() * b.v.LengthSquared() * b2_epsilon2)
+    {
+        simplex.Set(0, b);
+        simplex.Set(1, a);
+        simplex.SetSize(2);
+        return true;
+    }
+
+    b2Vec2 ac = c.v - a.v;
+    b2Scalar sgn2 = b2Cross(c.v, ac);
+    if (sgn2 * sgn2 < ac.LengthSquared() * c.v.LengthSquared() * b2_epsilon2)
+    {
+        simplex.Set(0, c);
+        simplex.Set(1, a);
+        simplex.SetSize(2);
+        return true;
+    }
+
+    b2Vec2 dir1, dir2;
+    if (sgn1 > b2Scalar(0.0))
+        dir1 = b2Cross(b2Scalar(1.0), ab).Normalized();
+    else
+        dir1 = b2Cross(ab, b2Scalar(1.0)).Normalized();
+    if (sgn2 > b2Scalar(0.0))
+        dir2 = b2Cross(b2Scalar(1.0), ac).Normalized();
+    else
+        dir2 = b2Cross(ac, b2Scalar(1.0)).Normalized();
+
+    b2Scalar dot1 = b2Dot(dir1, a.v); 
+    b2Scalar dot2 = b2Dot(dir2, a.v);
+    if (dot1 < b2Scalar(0.0) && dot2 < b2Scalar(0.0))
+        return true;
+    else if (dot1 > b2Scalar(0.0)) 
+    {
+        simplex.Set(0, b);
+        simplex.Set(1, a);
+        simplex.SetSize(2);
+        dir = dir1;
+    }
+    else 
+    {
+        simplex.Set(0, c);
+        simplex.Set(1, a);
+        simplex.SetSize(2);
+        dir = dir2;
+    }
+    return false;
+}
+
+bool doSimplex(b2Simplex &simplex, b2Vec2 &dir)
 {
-    void ReadCache(const b2SimplexCache* cache,
-            const b2DistanceProxy* proxyA, const b2Transform& transformA,
-            const b2DistanceProxy* proxyB, const b2Transform& transformB)
-    {
-//        b2Assert(cache->count <= 3);
+    if (simplex.Size() == 2)
+        return doSimplex2(simplex, dir);
+    else
+        return doSimplex3(simplex, dir);
+}
 
-        // Copy data from cache.
-        m_count = cache->count;
-        b2SimplexVertex* vertices = &m_v1;
-        for (int32 i = 0; i < m_count; ++i)
-        {
-            b2SimplexVertex* v = vertices + i;
-            v->indexA = cache->indexA[i];
-            v->indexB = cache->indexB[i];
-            b2Vec2 wALocal = proxyA->GetVertex(v->indexA);
-            b2Vec2 wBLocal = proxyB->GetVertex(v->indexB);
-            v->wA = b2Mul(transformA, wALocal);
-            v->wB = b2Mul(transformB, wBLocal);
-            v->w = v->wB - v->wA;
-            v->a = b2Scalar(0.0);
-        }
-
-        // Compute the new simplex metric, if it is substantially different than
-        // old metric then flush the simplex.
-        if (m_count > 1)
-        {
-            b2Scalar metric1 = cache->metric;
-            b2Scalar metric2 = GetMetric();
-            if (metric2 < b2Scalar(0.5) * metric1 || b2Scalar(2.0) * metric1 < metric2 || metric2 < b2_epsilon)
-            {
-                // Reset the simplex.
-                m_count = 0;
-            }
-        }
-
-        // If the cache is empty or invalid ...
-        if (m_count == 0)
-        {
-            b2SimplexVertex* v = vertices + 0;
-            v->indexA = 0;
-            v->indexB = 0;
-            b2Vec2 wALocal = proxyA->GetVertex(0);
-            b2Vec2 wBLocal = proxyB->GetVertex(0);
-            v->wA = b2Mul(transformA, wALocal);
-            v->wB = b2Mul(transformB, wBLocal);
-            v->w = v->wB - v->wA;
-            v->a = b2Scalar(1.0);
-            m_count = 1;
-        }
-    }
-
-    void WriteCache(b2SimplexCache* cache) const
-    {
-        cache->metric = GetMetric();
-        cache->count = uint16(m_count);
-        const b2SimplexVertex* vertices = &m_v1;
-        for (int32 i = 0; i < m_count; ++i)
-        {
-            cache->indexA[i] = uint8(vertices[i].indexA);
-            cache->indexB[i] = uint8(vertices[i].indexB);
-        }
-    }
-
-    b2Vec2 GetSearchDirection() const
-    {
-        switch (m_count)
-        {
-            case 1:
-                return -m_v1.w;
-
-            case 2:
-                {
-                    b2Vec2 e12 = m_v2.w - m_v1.w;
-                    b2Scalar sgn = b2Cross(e12, -m_v1.w);
-                    if (sgn > b2Scalar(0.0))
-                    {
-                        // Origin is left of e12.
-                        return b2Cross(b2Scalar(1.0), e12);
-                    }
-                    else
-                    {
-                        // Origin is right of e12.
-                        return b2Cross(e12, b2Scalar(1.0));
-                    }
-                }
-
-            default:
-                b2Assert(false);
-                return b2Vec2_zero;
-        }
-    }
-
-    b2Vec2 GetClosestPoint() const
-    {
-        switch (m_count)
-        {
-            case 0:
-                b2Assert(false);
-                return b2Vec2_zero;
-
-            case 1:
-                return m_v1.w;
-
-            case 2:
-                return m_v1.a * m_v1.w + m_v2.a * m_v2.w;
-
-            case 3:
-                return b2Vec2_zero;
-
-            default:
-                b2Assert(false);
-                return b2Vec2_zero;
-        }
-    }
-
-    void GetWitnessPoints(b2Vec2* pA, b2Vec2* pB) const
-    {
-        switch (m_count)
-        {
-            case 0:
-                b2Assert(false);
-                break;
-
-            case 1:
-                *pA = m_v1.wA;
-                *pB = m_v1.wB;
-                break;
-
-            case 2:
-                *pA = m_v1.a * m_v1.wA + m_v2.a * m_v2.wA;
-                *pB = m_v1.a * m_v1.wB + m_v2.a * m_v2.wB;
-                break;
-
-            case 3:
-                *pA = m_v1.a * m_v1.wA + m_v2.a * m_v2.wA + m_v3.a * m_v3.wA;
-                *pB = *pA;
-                break;
-
-            default:
-                b2Assert(false);
-                break;
-        }
-    }
-
-    b2Scalar GetMetric() const
-    {
-        switch (m_count)
-        {
-            case 0:
-                b2Assert(false);
-                return b2Scalar(0.0);
-
-            case 1:
-                return b2Scalar(0.0);
-
-            case 2:
-                return b2Distance(m_v1.w, m_v2.w);
-
-            case 3:
-                return b2Cross(m_v2.w - m_v1.w, m_v3.w - m_v1.w);
-
-            default:
-                b2Assert(false);
-                return b2Scalar(0.0);
-        }
-    }
-
-    void Solve2();
-    void Solve3();
-
-    b2SimplexVertex m_v1, m_v2, m_v3;
-    int32 m_count;
-};
-
-
-// Solve a line segment using barycentric coordinates.
-//
-// p = a1 * w1 + a2 * w2
-// a1 + a2 = 1
-//
-// The vector from the origin to the closest point on the line is
-// perpendicular to the line.
-// e12 = w2 - w1
-// dot(p, e) = 0
-// a1 * dot(w1, e) + a2 * dot(w2, e) = 0
-//
-// 2-by-2 linear system
-// [1      1     ][a1] = [1]
-// [w1.e12 w2.e12][a2] = [0]
-//
-// Define
-// d12_1 =  dot(w2, e12)
-// d12_2 = -dot(w1, e12)
-// d12 = d12_1 + d12_2
-//
-// Solution
-// a1 = d12_1 / d12
-// a2 = d12_2 / d12
-void b2Simplex::Solve2()
+b2Scalar originSegmentClosestPoint(const b2Vec2 &w1, const b2Vec2 &w2, b2Vec2 &closest_p)
 {
-    b2Vec2 w1 = m_v1.w;
-    b2Vec2 w2 = m_v2.w;
     b2Vec2 e12 = w2 - w1;
 
     // w1 region
     b2Scalar d12_2 = -b2Dot(w1, e12);
     if (d12_2 <= b2Scalar(0.0))
     {
-        // a2 <= 0, so we clamp it to 0
-        m_v1.a = b2Scalar(1.0);
-        m_count = 1;
-        return;
+        closest_p = w1;
+        return closest_p.Length();
     }
 
     // w2 region
     b2Scalar d12_1 = b2Dot(w2, e12);
     if (d12_1 <= b2Scalar(0.0))
     {
-        // a1 <= 0, so we clamp it to 0
-        m_v2.a = b2Scalar(1.0);
-        m_count = 1;
-        m_v1 = m_v2;
-        return;
+        closest_p = w2;
+        return closest_p.Length();
     }
 
     // Must be in e12 region.
     b2Scalar inv_d12 = b2Scalar(1.0) / (d12_1 + d12_2);
-    m_v1.a = d12_1 * inv_d12;
-    m_v2.a = d12_2 * inv_d12;
-    m_count = 2;
+    b2Scalar alpha = d12_1 * inv_d12;
+    closest_p = alpha * w1 + (b2Scalar(1.0) - alpha) * w2;
+    return closest_p.Length();
 }
 
-// Possible regions:
-// - points[2]
-// - edge points[0]-points[2]
-// - edge points[1]-points[2]
-// - inside the triangle
-void b2Simplex::Solve3()
+b2Scalar originSegmentClosestPoint(const b2Vec2 &w1, const b2Vec2 &w2, b2Scalar &alpha)
 {
-    b2Vec2 w1 = m_v1.w;
-    b2Vec2 w2 = m_v2.w;
-    b2Vec2 w3 = m_v3.w;
-
-    // Edge12
-    // [1      1     ][a1] = [1]
-    // [w1.e12 w2.e12][a2] = [0]
-    // a3 = 0
     b2Vec2 e12 = w2 - w1;
-    b2Scalar w1e12 = b2Dot(w1, e12);
-    b2Scalar w2e12 = b2Dot(w2, e12);
-    b2Scalar d12_1 = w2e12;
-    b2Scalar d12_2 = -w1e12;
-
-    // Edge13
-    // [1      1     ][a1] = [1]
-    // [w1.e13 w3.e13][a3] = [0]
-    // a2 = 0
-    b2Vec2 e13 = w3 - w1;
-    b2Scalar w1e13 = b2Dot(w1, e13);
-    b2Scalar w3e13 = b2Dot(w3, e13);
-    b2Scalar d13_1 = w3e13;
-    b2Scalar d13_2 = -w1e13;
-
-    // Edge23
-    // [1      1     ][a2] = [1]
-    // [w2.e23 w3.e23][a3] = [0]
-    // a1 = 0
-    b2Vec2 e23 = w3 - w2;
-    b2Scalar w2e23 = b2Dot(w2, e23);
-    b2Scalar w3e23 = b2Dot(w3, e23);
-    b2Scalar d23_1 = w3e23;
-    b2Scalar d23_2 = -w2e23;
-
-    // Triangle123
-    b2Scalar n123 = b2Cross(e12, e13);
-
-    b2Scalar d123_1 = n123 * b2Cross(w2, w3);
-    b2Scalar d123_2 = n123 * b2Cross(w3, w1);
-    b2Scalar d123_3 = n123 * b2Cross(w1, w2);
 
     // w1 region
-    if (d12_2 <= b2Scalar(0.0) && d13_2 <= b2Scalar(0.0))
+    b2Scalar d12_2 = -b2Dot(w1, e12);
+    if (d12_2 <= b2Scalar(0.0))
     {
-        m_v1.a = b2Scalar(1.0);
-        m_count = 1;
-        return;
-    }
-
-    // e12
-    if (d12_1 > b2Scalar(0.0) && d12_2 > b2Scalar(0.0) && d123_3 <= b2Scalar(0.0))
-    {
-        b2Scalar inv_d12 = b2Scalar(1.0) / (d12_1 + d12_2);
-        m_v1.a = d12_1 * inv_d12;
-        m_v2.a = d12_2 * inv_d12;
-        m_count = 2;
-        return;
-    }
-
-    // e13
-    if (d13_1 > b2Scalar(0.0) && d13_2 > b2Scalar(0.0) && d123_2 <= b2Scalar(0.0))
-    {
-        b2Scalar inv_d13 = b2Scalar(1.0) / (d13_1 + d13_2);
-        m_v1.a = d13_1 * inv_d13;
-        m_v3.a = d13_2 * inv_d13;
-        m_count = 2;
-        m_v2 = m_v3;
-        return;
+        alpha = b2Scalar(0.0);
+        return w1.Length();
     }
 
     // w2 region
-    if (d12_1 <= b2Scalar(0.0) && d23_2 <= b2Scalar(0.0))
+    b2Scalar d12_1 = b2Dot(w2, e12);
+    if (d12_1 <= b2Scalar(0.0))
     {
-        m_v2.a = b2Scalar(1.0);
-        m_count = 1;
-        m_v1 = m_v2;
-        return;
+        alpha = b2Scalar(1.0);
+        return w2.Length();
     }
 
-    // w3 region
-    if (d13_1 <= b2Scalar(0.0) && d23_1 <= b2Scalar(0.0))
-    {
-        m_v3.a = b2Scalar(1.0);
-        m_count = 1;
-        m_v1 = m_v3;
-        return;
-    }
-
-    // e23
-    if (d23_1 > b2Scalar(0.0) && d23_2 > b2Scalar(0.0) && d123_1 <= b2Scalar(0.0))
-    {
-        b2Scalar inv_d23 = b2Scalar(1.0) / (d23_1 + d23_2);
-        m_v2.a = d23_1 * inv_d23;
-        m_v3.a = d23_2 * inv_d23;
-        m_count = 2;
-        m_v1 = m_v3;
-        return;
-    }
-
-    // Must be in triangle123
-    b2Scalar inv_d123 = b2Scalar(1.0) / (d123_1 + d123_2 + d123_3);
-    m_v1.a = d123_1 * inv_d123;
-    m_v2.a = d123_2 * inv_d123;
-    m_v3.a = d123_3 * inv_d123;
-    m_count = 3;
+    // Must be in e12 region.
+    b2Scalar inv_d12 = b2Scalar(1.0) / (d12_1 + d12_2);
+    alpha = d12_1 * inv_d12;
+    b2Vec2 closest_p = alpha * w1 + (b2Scalar(1.0) - alpha) * w2;
+    return closest_p.Length();
 }
 
-void b2Distance(b2DistanceOutput* output,
-        b2SimplexCache* cache,
-        const b2DistanceInput* input)
+b2Scalar simplexReduceToSegment(b2Simplex &simplex, b2Scalar &dist, b2Vec2 &best_witness)
 {
-    ++b2_gjkCalls;
+    b2Scalar newdist;
+    b2Vec2 witness;
+    int best = -1;
 
-    const b2DistanceProxy* proxyA = &input->proxyA;
-    const b2DistanceProxy* proxyB = &input->proxyB;
-
-    b2Transform transformA = input->transformA;
-    b2Transform transformB = input->transformB;
-
-    // Initialize the simplex.
-    b2Simplex simplex;
-    simplex.ReadCache(cache, proxyA, transformA, proxyB, transformB);
-
-    // Get simplex vertices as an array.
-    b2SimplexVertex* vertices = &simplex.m_v1;
-    const int32 k_maxIters = 20;
-
-    // These store the vertices of the last simplex so that we
-    // can check for duplicates and prevent cycling.
-    int32 saveA[3], saveB[3];
-    int32 saveCount = 0;
-
-    // Main iteration loop.
-    int32 iter = 0;
-    while (iter < k_maxIters)
+    // try the third point in all two positions
+    for (int i = 0; i < 2; i++)
     {
-        // Copy simplex so we can identify duplicates.
-        saveCount = simplex.m_count;
-        for (int32 i = 0; i < saveCount; ++i)
+        newdist = originSegmentClosestPoint(simplex.At(i == 0 ? 2 : 0).v, simplex.At(i == 1 ? 2 : 1).v, witness);
+        // record the best triangle
+        if (newdist < dist)
         {
-            saveA[i] = vertices[i].indexA;
-            saveB[i] = vertices[i].indexB;
-        }
-
-        switch (simplex.m_count)
-        {
-            case 1:
-                break;
-
-            case 2:
-                simplex.Solve2();
-                break;
-
-            case 3:
-                simplex.Solve3();
-                break;
-
-            default:
-                b2Assert(false);
-        }
-
-        // If we have 3 points, then the origin is in the corresponding triangle.
-        if (simplex.m_count == 3)
-        {
-            break;
-        }
-
-        // Get search direction.
-        b2Vec2 d = simplex.GetSearchDirection();
-
-        // Ensure the search direction is numerically fit.
-        if (d.LengthSquared() < b2_epsilon * b2_epsilon)
-        {
-            // The origin is probably contained by a line segment
-            // or triangle. Thus the shapes are overlapped.
-
-            // We can't return zero here even though there may be overlap.
-            // In case the simplex is a point, segment, or triangle it is difficult
-            // to determine if the origin is contained in the CSO or very close to it.
-            break;
-        }
-
-        // Compute a tentative new simplex vertex using support points.
-        b2SimplexVertex* vertex = vertices + simplex.m_count;
-        vertex->indexA = proxyA->GetSupport(b2MulT(transformA.q, -d));
-        vertex->wA = b2Mul(transformA, proxyA->GetVertex(vertex->indexA));
-        vertex->indexB = proxyB->GetSupport(b2MulT(transformB.q, d));
-        vertex->wB = b2Mul(transformB, proxyB->GetVertex(vertex->indexB));
-        vertex->w = vertex->wB - vertex->wA;
-
-        // Iteration count is equated to the number of support point calls.
-        ++iter;
-        ++b2_gjkIters;
-
-        // Check for duplicate support points. This is the main termination criteria.
-        bool duplicate = false;
-        for (int32 i = 0; i < saveCount; ++i)
-        {
-            if (vertex->indexA == saveA[i] && vertex->indexB == saveB[i])
-            {
-                duplicate = true;
-                break;
-            }
-        }
-
-        // If we found a duplicate support point we must exit to avoid cycling.
-        if (duplicate)
-        {
-            break;
-        }
-
-        // New vertex is ok and needed.
-        ++simplex.m_count;
-    }
-
-    b2_gjkMaxIters = b2Max(b2_gjkMaxIters, iter);
-
-    // Prepare output.
-    simplex.GetWitnessPoints(&output->pointA, &output->pointB);
-    output->distance = b2Distance(output->pointA, output->pointB);
-    output->iterations = iter;
-
-    // Cache the simplex.
-    simplex.WriteCache(cache);
-
-    // Apply radii if requested
-    if (input->useRadii)
-    {
-        if (output->distance < b2_epsilon)
-        {
-            // Shapes are too close to safely compute normal
-            b2Vec2 p = b2Scalar(0.5) * (output->pointA + output->pointB);
-            output->pointA = p;
-            output->pointB = p;
-            output->distance = b2Scalar(0.0);
-        }
-        else
-        {
-            // Keep closest points on perimeter even if overlapped, this way
-            // the points move smoothly.
-            b2Scalar rA = proxyA->m_radius;
-            b2Scalar rB = proxyB->m_radius;
-            b2Vec2 normal = output->pointB - output->pointA;
-            normal.Normalize();
-            output->distance = b2Max(b2Scalar(0.0), output->distance - rA - rB);
-            output->pointA += rA * normal;
-            output->pointB -= rB * normal;
+            best = i;
+            dist = newdist;
+            best_witness = witness;
         }
     }
+    if (best >= 0)
+        simplex.Set(best, simplex.At(2));
+    simplex.SetSize(2);
+    return dist;
 }
 
-// GJK-raycast
-// Algorithm by Gino van den Bergen.
-// "Smooth Mesh Contacts with GJK" in Game Physics Pearls. 2010
-/*
-bool b2ShapeCast(b2ShapeCastOutput * output, const b2ShapeCastInput * input)
+void simplexClosestP(b2Simplex &simplex, b2Vec2 &closest_p, b2Scalar &distp)
 {
-    output->iterations = 0;
-    output->lambda = b2Scalar(1.0);
-    output->normal.SetZero();
-    output->point.SetZero();
-
-    const b2DistanceProxy* proxyA = &input->proxyA;
-    const b2DistanceProxy* proxyB = &input->proxyB;
-
-    b2Scalar radiusA = b2Max(proxyA->m_radius, b2_polygonRadius);
-    b2Scalar radiusB = b2Max(proxyB->m_radius, b2_polygonRadius);
-    b2Scalar radius = radiusA + radiusB;
-
-    b2Transform xfA = input->transformA;
-    b2Transform xfB = input->transformB;
-
-    b2Vec2 r = input->translationB;
-    b2Vec2 n(b2Scalar(0.0), b2Scalar(0.0));
-    b2Scalar lambda = b2Scalar(0.0);
-
-    // Initial simplex
-    b2Simplex simplex;
-    simplex.m_count = 0;
-
-    // Get simplex vertices as an array.
-    b2SimplexVertex* vertices = &simplex.m_v1;
-
-    // Get support point in -r direction
-    int32 indexA = proxyA->GetSupport(b2MulT(xfA.q, -r));
-    b2Vec2 wA = b2Mul(xfA, proxyA->GetVertex(indexA));
-    int32 indexB = proxyB->GetSupport(b2MulT(xfB.q, r));
-    b2Vec2 wB = b2Mul(xfB, proxyB->GetVertex(indexB));
-    b2Vec2 v = wA - wB;
-
-    // Sigma is the target distance between polygons
-    b2Scalar sigma = b2Max(b2_polygonRadius, radius - b2_polygonRadius);
-    const b2Scalar tolerance = b2Scalar(0.5) * b2_linearSlop;
-
-    // Main iteration loop.
-    const int32 k_maxIters = 20;
-    int32 iter = 0;
-    while (iter < k_maxIters && v.Length() - sigma > tolerance)
+    int sz = simplex.Size();
+    if (sz == 1)
     {
-        b2Assert(simplex.m_count < 3);
+        closest_p = simplex.At(0).v;
+        distp = closest_p.Length();
+    }
+    else if (sz == 2)
+        distp = originSegmentClosestPoint(simplex.At(0).v, simplex.At(1).v, closest_p);
+    else
+        distp = simplexReduceToSegment(simplex, distp, closest_p);
+}
 
-        output->iterations += 1;
+void support(const b2MinkowskiDiff& shape, const b2Vec2 &closest_p, b2Vec2 &dir, b2Support &last)
+{
+    // point direction towards the origin
+    dir = (-closest_p).Normalized();
+    last = shape.SupportS(dir);
+}
 
-        // Support in direction -v (A - B)
-        indexA = proxyA->GetSupport(b2MulT(xfA.q, -v));
-        wA = b2Mul(xfA, proxyA->GetVertex(indexA));
-        indexB = proxyB->GetSupport(b2MulT(xfB.q, v));
-        wB = b2Mul(xfB, proxyB->GetVertex(indexB));
-        b2Vec2 p = wA - wB;
+bool ccdOptimal(const b2Vec2 &closest_p, const b2Vec2 &dir, const b2Vec2 &last, b2Scalar tol)
+{
+    b2Vec2 temp = last - closest_p;
+    if (b2Dot(dir, temp) < tol)
+        return true;
+    return false;
+}
 
-        // -v is a normal at p
-        v.Normalize();
+void extractObjectPointsFromPoint(const b2Support &q, b2Vec2 &p1, b2Vec2 &p2)
+{
+    p1 = q.v1;
+    p2 = q.v2;
+}
 
-        // Intersect ray with plane
-        b2Scalar vp = b2Dot(v, p);
-        b2Scalar vr = b2Dot(v, r);
-        if (vp - sigma > lambda * vr)
-        {
-            if (vr <= b2Scalar(0.0))
-            {
-                return false;
-            }
+b2Scalar alphaRatio(const b2Support &a, const b2Support &b, const b2Vec2 &p)
+{
+    b2Vec2 AB = b.v - a.v;
 
-            lambda = (vp - sigma) / vr;
-            if (lambda > b2Scalar(1.0))
-            {
-                return false;
-            }
+    b2Scalar abs_AB_x{std::abs(AB(0))};
+    b2Scalar abs_AB_y{std::abs(AB(1))};
 
-            n = -v;
-            simplex.m_count = 0;
-        }
+    b2Scalar A_i, AB_i, p_i;
+    if (abs_AB_x >= abs_AB_y)
+    {
+        A_i = a.v(0);
+        AB_i = AB(0);
+        p_i = p(0);
+    }
+    else
+    {
+        A_i = a.v(1);
+        AB_i = AB(1);
+        p_i = p(1);
+    }
+    if (std::abs(AB_i) < b2_epsilon)
+        return b2Scalar(-1.0);
+    return (p_i - A_i) / AB_i;
+}
 
-        // Reverse simplex since it works with B - A.
-        // Shift by lambda * r because we want the closest point to the current clip point.
-        // Note that the support point p is not shifted because we want the plane equation
-        // to be formed in unshifted space.
-        b2SimplexVertex* vertex = vertices + simplex.m_count;
-        vertex->indexA = indexB;
-        vertex->wA = wB + lambda * r;
-        vertex->indexB = indexA;
-        vertex->wB = wA;
-        vertex->w = vertex->wB - vertex->wA;
-        vertex->a = b2Scalar(1.0);
-        simplex.m_count += 1;
-
-        switch (simplex.m_count)
-        {
-            case 1:
-                break;
-
-            case 2:
-                simplex.Solve2();
-                break;
-
-            case 3:
-                simplex.Solve3();
-                break;
-
-            default:
-                b2Assert(false);
-        }
-
-        // If we have 3 points, then the origin is in the corresponding triangle.
-        if (simplex.m_count == 3)
-        {
-            // Overlap
-            return false;
-        }
-
-        // Get search direction.
-        v = simplex.GetClosestPoint();
-
-        // Iteration count is equated to the number of support point calls.
-        ++iter;
+void extractObjectPointsFromSegment(const b2Support &a, const b2Support &b, b2Vec2 &p1, b2Vec2 &p2, const b2Vec2 &p)
+{
+    b2Scalar s = alphaRatio(a, b, p);
+    if (s < b2Scalar(0.0)) 
+    {
+        // Points are coincident; treat as a single point.
+        extractObjectPointsFromPoint(a, p1, p2);
+        return;
     }
 
-    if (iter == 0)
+    auto calc_p = [](const b2Vec2 &p_a, const b2Vec2 &p_b, b2Vec2 &p, b2Scalar s) {
+        p = p_a + s * (p_b - p_a);
+    };
+
+    calc_p(a.v1, b.v1, p1, s);
+    calc_p(a.v2, b.v2, p2, s);
+}
+
+void extractClosestPoints(const b2Simplex &simplex, b2Vec2 &p1, b2Vec2 &p2, const b2Vec2 &p)
+{
+    const int simplex_size = simplex.Size();
+    if (simplex_size == 1)
+        extractObjectPointsFromPoint(simplex.At(0), p1, p2);
+    else
+        extractObjectPointsFromSegment(simplex.At(0), simplex.At(1), p1, p2, p);
+}
+
+bool ccdSeparation(const b2MinkowskiDiff &shape, b2Simplex &simplex, int max_iterations, b2Scalar tol)
+{
+    b2Vec2 dir(1.0, 0.0); // direction vector
+    b2Support last = shape.SupportS(dir); // last support point
+    simplex.Add(last);
+    if (b2Dot(last.v, dir) < b2Scalar(0.0))
+        return true;
+    dir = (-last.v).Normalized();
+    for (int iterations = 0; iterations < max_iterations; ++iterations)
     {
-        // Initial overlap
-        return false;
+        // obtain support point
+        last = shape.SupportS(dir);
+        simplex.Add(last);
+
+        // check if farthest point in Minkowski difference in direction dir
+        // isn't somewhere before origin (the test on negative dot product)
+        // - because if it is, objects are not intersecting at all.
+        if (b2Dot(last.v, dir) < b2Scalar(0.0))
+            return true; // intersection not found
+        if (doSimplex(simplex, dir))
+            return false; // intersection found
     }
-
-    // Prepare output.
-    b2Vec2 pointA, pointB;
-    simplex.GetWitnessPoints(&pointB, &pointA);
-
-    if (v.LengthSquared() > b2Scalar(0.0))
-    {
-        n = -v;
-        n.Normalize();
-    }
-
-    output->point = pointA + radiusA * n;
-    output->normal = n;
-    output->lambda = lambda;
-    output->iterations = iter;
     return true;
 }
-*/
+
+b2Scalar ccdDistance(const b2MinkowskiDiff &shape, b2Simplex &simplex, int max_iterations, b2Scalar tol, b2Vec2 &p1, b2Vec2 &p2)
+{
+    b2Scalar last_dist = b2_maxFloat;
+    b2Vec2 closest_p; // The point on the simplex that is closest to the
+    for (int iterations = 0; iterations < max_iterations; ++iterations)
+    {
+        // origin.
+        // get a next direction vector
+        // we are trying to find out a point on the minkowski difference
+        // that is nearest to the origin, so we obtain a point on the
+        // simplex that is nearest and try to exapand the simplex towards
+        // the origin
+        simplexClosestP(simplex, closest_p, last_dist);
+
+        b2Vec2 dir; // direction vector
+        b2Support last; // last support point
+        support(shape, closest_p, dir, last);
+
+        if (ccdOptimal(closest_p, dir, last.v, tol))
+        {
+            extractClosestPoints(simplex, p1, p2, closest_p);
+            return last_dist;
+        }
+        simplex.Add(last);
+    }
+    simplexClosestP(simplex, closest_p, last_dist);
+    extractClosestPoints(simplex, p1, p2, closest_p);
+    return last_dist;
+}
+
+bool simplexToPolytope2(const b2MinkowskiDiff &shape, b2Simplex &simplex, b2Polytope &polytope)
+{
+    b2Support a = simplex.At(1);
+    if (a.v.LengthSquared() < b2_epsilon2)
+    {
+        simplex.Set(0, a);
+        simplex.SetSize(1);
+        return false;
+    }
+    b2Support b = simplex.At(0);
+    b2Vec2 ab = b.v - a.v;
+
+    b2Vec2 dir1 = b2Cross(b2Scalar(1.0), ab).Normalized();
+    b2Support last1 = shape.SupportS(dir1);
+    if (b2Dot(dir1, last1.v) < b2_epsilon)
+        return false;
+
+    b2Vec2 dir2 = b2Cross(ab, b2Scalar(1.0)).Normalized();
+    b2Support last2 = shape.SupportS(dir2);
+    if (b2Dot(dir2, last2.v) < b2_epsilon)
+        return false;
+
+    if (b2Dot(ab, last1.v - a.v) > b2Scalar(0.0))
+    {
+        polytope.ps.push_back(b);
+        polytope.ps.push_back(last1);
+        polytope.ps.push_back(a);
+        polytope.ps.push_back(last2);
+    }
+    else 
+    {
+        polytope.ps.push_back(b);
+        polytope.ps.push_back(last2);
+        polytope.ps.push_back(a);
+        polytope.ps.push_back(last1);
+    }
+    return true;
+}
+
+bool simplexToPolytope3(b2Simplex &simplex, b2Polytope &polytope)
+{
+    b2Support a = simplex.At(2);
+    if (a.v.LengthSquared() < b2_epsilon2)
+    {
+        simplex.Set(0, a);
+        simplex.SetSize(1);
+        return false;
+    }
+    b2Support b = simplex.At(1), c = simplex.At(0);
+    if (b2Cross(b.v, a.v) > b2Scalar(0.0))
+    {
+        polytope.ps.push_back(c);
+        polytope.ps.push_back(b);
+        polytope.ps.push_back(a);
+    }
+    else
+    {
+        polytope.ps.push_back(c);
+        polytope.ps.push_back(a);
+        polytope.ps.push_back(b);
+    }
+    return true;
+}
+
+bool simplexToPolytope(const b2MinkowskiDiff &shape, b2Simplex &simplex, b2Polytope &polytope)
+{
+    int sz = simplex.Size();
+    if (sz == 2)
+        return simplexToPolytope2(shape, simplex, polytope);
+    else if (sz == 3)
+        return simplexToPolytope3(simplex, polytope);
+    else 
+        b2Error("The simplex to polytope function has a wrong number of point size!");
+    return true;
+}
+
+b2Scalar ccdPenetration(const b2MinkowskiDiff &shape, b2Simplex &simplex, int max_iterations, b2Scalar tol, b2Vec2 &p1, b2Vec2 &p2)
+{
+    b2Polytope polytope;
+    if (!simplexToPolytope(shape, simplex, polytope))
+    {
+        extractClosestPoints(simplex, p1, p2, b2Vec2_zero);
+        return b2Scalar(0.0);
+    }
+
+    for (std::size_t i = 0, sz = polytope.ps.size(); i < sz; i++)
+    {
+        std::size_t j = (i + 1) % sz;
+        b2Polytope::Edge edge(i, j);
+        edge.dist = originSegmentClosestPoint(polytope.ps[i].v, polytope.ps[j].v, edge.s);
+        polytope.edgeQueue.push(edge);
+    }
+
+    auto calc_p = [](const b2Vec2 &p_a, const b2Vec2 &p_b, b2Vec2 &p, b2Scalar s) {
+        p = p_a + s * (p_b - p_a);
+    };
+
+    b2Polytope::Edge edge = polytope.edgeQueue.top();
+    for (int iterations = 0; iterations < max_iterations; ++iterations)
+    {
+        edge = polytope.edgeQueue.top();
+        polytope.edgeQueue.pop();
+        std::size_t i = edge.index1, j = edge.index2;
+        const b2Vec2& vi = polytope.ps[i].v;
+        const b2Vec2& vj = polytope.ps[j].v;
+        if (vi.IsApprox(vj, tol))
+        {
+            calc_p(polytope.ps[i].v1, polytope.ps[j].v1, p1, edge.s);
+            calc_p(polytope.ps[i].v2, polytope.ps[j].v2, p2, edge.s);
+            return edge.dist;
+        }
+
+        b2Vec2 dir = b2Cross(vj - vi, b2Scalar(1.0)).Normalized();
+        b2Support last = shape.SupportS(dir);
+        if (b2Dot(dir, last.v - vi) < tol)
+        {
+            calc_p(polytope.ps[i].v1, polytope.ps[j].v1, p1, edge.s);
+            calc_p(polytope.ps[i].v2, polytope.ps[j].v2, p2, edge.s);
+            return edge.dist;
+        }
+        polytope.ps.push_back(last);
+        std::size_t index = polytope.ps.size() - 1;
+        edge.Set(i, index);
+        edge.dist = originSegmentClosestPoint(vi, last.v, edge.s);
+        polytope.edgeQueue.push(edge);
+        edge.Set(index, j);
+        edge.dist = originSegmentClosestPoint(last.v, vj, edge.s);
+        polytope.edgeQueue.push(edge);
+    }
+    edge = polytope.edgeQueue.top();
+    std::size_t i = edge.index1, j = edge.index2;
+    calc_p(polytope.ps[i].v1, polytope.ps[j].v1, p1, edge.s);
+    calc_p(polytope.ps[i].v2, polytope.ps[j].v2, p2, edge.s);
+    return edge.dist;
+}
+}
+
+bool b2ShapeDistance::Separation(const b2Shape* shape1, const b2Transform &xf1,
+        const b2Shape* shape2, const b2Transform &xf2) const
+{
+    b2MinkowskiDiff shape;
+    shape.shapes[0] = shape1;
+    shape.shapes[1] = shape2;
+    shape.toshape1 = b2MulT(xf2.q, xf1.q);
+    shape.toshape0 = b2MulT(xf1, xf2);
+    b2Simplex simplex;
+    return ccdSeparation(shape, simplex, max_distance_iterations, distance_tolerance);
+}
+
+bool b2ShapeDistance::Distance(const b2Shape* shape1, const b2Transform &xf1,
+        const b2Shape* shape2, const b2Transform &xf2,
+        b2Scalar *dist, b2Vec2 *p1, b2Vec2 *p2) const
+{
+    b2MinkowskiDiff shape;
+    shape.shapes[0] = shape1;
+    shape.shapes[1] = shape2;
+    shape.toshape1 = b2MulT(xf2.q, xf1.q);
+    shape.toshape0 = b2MulT(xf1, xf2);
+
+    b2Simplex simplex;
+    if (!ccdSeparation(shape, simplex, max_distance_iterations, distance_tolerance))
+    {
+        if (dist) *dist = b2Scalar(-1.0);
+        return false;
+    }
+    
+    b2Vec2 p1_, p2_;
+    b2Scalar d = ccdDistance(shape, simplex, max_distance_iterations, distance_tolerance, p1_, p2_);
+    if (dist) *dist = d;
+    if (d > b2Scalar(0.0))
+    {
+        if (p1) *p1 = b2Mul(xf1, p1_);
+        if (p2) *p2 = b2Mul(xf1, p2_);
+        return true;
+    }
+    else 
+        return false;
+}
+
+bool b2ShapeDistance::SignedDistance(const b2Shape* shape1, const b2Transform &xf1,
+        const b2Shape* shape2, const b2Transform &xf2,
+        b2Scalar *dist, b2Vec2 *p1, b2Vec2 *p2) const
+{
+    b2MinkowskiDiff shape;
+    shape.shapes[0] = shape1;
+    shape.shapes[1] = shape2;
+    shape.toshape1 = b2MulT(xf2.q, xf1.q);
+    shape.toshape0 = b2MulT(xf1, xf2);
+
+    b2Scalar d;
+    b2Vec2 p1_, p2_;
+    b2Simplex simplex;
+    if (ccdSeparation(shape, simplex, max_distance_iterations, distance_tolerance))
+        d = ccdDistance(shape, simplex, max_distance_iterations, distance_tolerance, p1_, p2_);
+    else 
+        d = -ccdPenetration(shape, simplex, max_distance_iterations, distance_tolerance, p1_, p2_);
+    if (dist) *dist = d;
+    if (p1) *p1 = b2Mul(xf1, p1_);
+    if (p2) *p2 = b2Mul(xf1, p2_);
+    if (d > b2Scalar(0.0))
+        return true;
+    else 
+        return false;
+}

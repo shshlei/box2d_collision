@@ -21,7 +21,6 @@
 // SOFTWARE.
 
 #include "box2d_collision/b2_body.h"
-#include "box2d_collision/b2_contact.h"
 #include "box2d_collision/b2_fixture.h"
 
 #include <new>
@@ -32,13 +31,7 @@ b2Body::b2Body(const b2BodyDef* bd)
 
     m_xf.p = bd->position;
     m_xf.q.Set(bd->angle);
-
-    m_sweep.localCenter.SetZero();
-    m_sweep.c0 = m_xf.p;
-    m_sweep.c = m_xf.p;
-    m_sweep.a0 = bd->angle;
-    m_sweep.a = bd->angle;
-    m_sweep.alpha0 = b2Scalar(0.0);
+    m_angle = bd->angle;
 
     m_prev = nullptr;
     m_next = nullptr;
@@ -71,18 +64,20 @@ b2Fixture* b2Body::CreateFixture(const b2FixtureDef* def)
     return fixture;
 }
 
-b2Fixture* b2Body::CreateFixture(const b2Shape* shape, uint32 shape_index)
+b2Fixture* b2Body::CreateFixture(const b2Shape* shape, const b2Transform& xf, unsigned int shape_index)
 {
     b2FixtureDef def;
     def.shape = shape;
+    def.xf = xf;
     def.userData.pointer = shape_index;
     return CreateFixture(&def);
 }
 
-b2Fixture* b2Body::AddShape(const b2Shape* shape, uint32 shape_index)
+b2Fixture* b2Body::AddShape(const b2Shape* shape, const b2Transform& xf, unsigned int shape_index)
 {
     b2FixtureDef def;
     def.shape = shape;
+    def.xf = xf;
     def.userData.pointer = shape_index;
     return CreateFixture(&def);
 }

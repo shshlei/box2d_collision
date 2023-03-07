@@ -23,27 +23,9 @@
 #ifndef B2_BROAD_PHASE_H
 #define B2_BROAD_PHASE_H
 
-#include "b2_api.h"
-#include "b2_settings.h"
-#include "b2_collision.h"
 #include "b2_dynamic_tree.h"
 #include <vector>
 #include <unordered_set>
-
-struct B2_API b2Pair
-{
-    b2Pair()
-    {
-        proxyIdA = proxyIdB = -1;
-    }
-    b2Pair(int32 a, int32 b)
-    {
-        proxyIdA = a;
-        proxyIdB = b;
-    }
-    int32 proxyIdA;
-    int32 proxyIdB;
-};
 
 /// The broad-phase is used for computing pairs and performing volume queries and ray casts.
 /// This broad-phase does not persist pairs. Instead, this reports potentially new pairs.
@@ -58,78 +40,68 @@ public:
     };
 
     b2BroadPhase();
+
     ~b2BroadPhase();
 
-    /// Create a proxy with an initial AABB. Pairs are not reported until
-    /// UpdatePairs is called.
-    int32 CreateProxy(const b2AABB& aabb, void* userData, bool extend = true);
+    /// Create a proxy with an initial AABB.
+    int CreateProxy(const b2AABB& aabb, void* userData, bool active = true);
 
-    void UpdateProxy(int32 proxyId, bool extend);
+    void UpdateProxy(int proxyId, bool active);
 
     /// Destroy a proxy. It is up to the client to remove any pairs.
-    void DestroyProxy(int32 proxyId);
-
-    /// Call MoveProxy as many times as you like, then when you are done
-    /// call UpdatePairs to finalized the proxy pairs (for your time step).
-    void MoveProxy(int32 proxyId, const b2AABB& aabb, const b2Vec2& displacement);
+    void DestroyProxy(int proxyId);
 
     /// Call UpdateProxy as many times as you like, then when you are done
-    /// call UpdatePairs to finalized the proxy pairs (for your time step).
-    void UpdateProxy(int32 proxyId, const b2AABB& aabb);
+    void UpdateProxy(int proxyId, const b2AABB& aabb);
 
-    /// Call to trigger a re-processing of it's pairs on the next call to UpdatePairs.
-    void TouchProxy(int32 proxyId);
-
-    /// Get the fat AABB for a proxy.
-    const b2AABB& GetFatAABB(int32 proxyId) const;
-
-    /// Get user data from a proxy. Returns nullptr if the id is invalid.
-    void* GetUserData(int32 proxyId) const;
-
-    /// Test overlap of fat AABBs.
-    bool TestOverlap(int32 proxyIdA, int32 proxyIdB) const;
-
-    /// Get the number of proxies.
-    int32 GetProxyCount() const;
-
-    /// Update the pairs. This results in pair callbacks. This can only add pairs.
+    /// Self collision test. For active shapes 
     template <typename T>
-    void UpdatePairs(T* callback);
+    bool Collide(T* callback);
 
-    /// Update the pairs. This results in pair callbacks. This can only add pairs.
+    /// Self distance test. For active shapes
     template <typename T>
-    void UpdateDistancePairs(T* callback);
-
-    /// Query an AABB for overlapping proxies. The callback class
-    /// is called for each proxy that overlaps the supplied AABB.
-    template <typename T>
-    void Query(T* callback, const b2AABB& aabb) const;
-
-    /// Query a point for overlapping proxies. The callback class
-    /// is called for each proxy that contains the supplied point.
-    template <typename T>
-    void Query(T* callback, const b2Vec2& point) const;
+    bool Distance(T* callback, b2Scalar &dist);
 
     template <typename T>
-    void Query(T* callback, const b2BroadPhase* tree) const;
+    bool Collide(T* callback, const b2AABB& aabb) const;
 
-    /// Ray-cast against the proxies in the tree. This relies on the callback
-    /// to perform a exact ray-cast in the case were the proxy contains a shape.
-    /// The callback also performs the any collision filtering. This has performance
-    /// roughly equal to k * log(n), where k is the number of collisions and n is the
-    /// number of proxies in the tree.
-    /// @param input the ray-cast input data. The ray extends from p1 to p1 + maxFraction * (p2 - p1).
-    /// @param callback a callback class that is called for each proxy that is hit by the ray.
     template <typename T>
-    void RayCast(T* callback, const b2RayCastInput& input) const;
+    bool Collide(T* callback, const b2Vec2& point) const;
+
+    template <typename T>
+    bool Collide(T* callback, const b2BroadPhase* tree) const;
+
+    template <typename T>
+    bool Distance(T* callback, const b2AABB& aabb, b2Scalar &dist) const;
+
+    template <typename T>
+    bool Distance(T* callback, const b2Vec2& point, b2Scalar &dist) const;
+
+    template <typename T>
+    bool Distance(T* callback, const b2BroadPhase* tree, b2Scalar &dist) const;
+
+    template <typename T>
+    bool SelfDistance(T* callback, b2Scalar &dist) const;
 
     const b2DynamicTree* GetDynamicTree() const; 
 
+    /// Get the fat AABB for a proxy.
+    const b2AABB& GetFatAABB(int proxyId) const;
+
+    /// Get user data from a proxy. Returns nullptr if the id is invalid.
+    void* GetUserData(int proxyId) const;
+
+    /// Test overlap of fat AABBs.
+    bool TestOverlap(int proxyIdA, int proxyIdB) const;
+
+    /// Get the number of proxies.
+    int GetProxyCount() const;
+
     /// Get the height of the embedded tree.
-    int32 GetTreeHeight() const;
+    int GetTreeHeight() const;
 
     /// Get the balance of the embedded tree.
-    int32 GetTreeBalance() const;
+    int GetTreeBalance() const;
 
     /// Get the quality metric of the embedded tree.
     b2Scalar GetTreeQuality() const;
@@ -139,9 +111,11 @@ public:
     /// @param newOrigin the new origin with respect to the old origin
     void ShiftOrigin(const b2Vec2& newOrigin);
 
-    void ClearBufferMove();
     void ClearBufferActive();
-    void ClearBufferPairs();
+
+    int GetQueryProxyId() const;
+
+    bool IsActive(int proxyId) const;
 
     void setContactDistanceThreshold(b2Scalar contact_distance);
 
@@ -151,25 +125,18 @@ private:
 
     friend class b2DynamicTree;
 
-    bool QueryCallback(int32 proxyId);
-    bool QueryCallbackDistance(int32 proxyId);
-    bool WasMoved(int32 proxyId) const;
-    bool IsActive(int32 proxyId) const;
-
     b2DynamicTree m_tree;
 
-    int32 m_proxyCount;
+    int m_proxyCount;
 
-    int32 m_queryProxyId;
+    int m_queryProxyId;
 
-    std::vector<b2Pair> m_pairBuffer;
-    std::unordered_set<int32> m_moveBuffer;
-    std::unordered_set<int32> m_activeBuffer;
+    std::unordered_set<int> m_activeBuffer;
 };
 
-B2_FORCE_INLINE void b2BroadPhase::ClearBufferMove()
+B2_FORCE_INLINE int b2BroadPhase::GetQueryProxyId() const
 {
-    m_moveBuffer.clear();
+    return m_queryProxyId;
 }
 
 B2_FORCE_INLINE void b2BroadPhase::ClearBufferActive()
@@ -177,24 +144,19 @@ B2_FORCE_INLINE void b2BroadPhase::ClearBufferActive()
     m_activeBuffer.clear();
 }
 
-B2_FORCE_INLINE void b2BroadPhase::ClearBufferPairs()
-{
-    m_pairBuffer.clear();
-}
-
-B2_FORCE_INLINE void* b2BroadPhase::GetUserData(int32 proxyId) const
+B2_FORCE_INLINE void* b2BroadPhase::GetUserData(int proxyId) const
 {
     return m_tree.GetUserData(proxyId);
 }
 
-B2_FORCE_INLINE bool b2BroadPhase::TestOverlap(int32 proxyIdA, int32 proxyIdB) const
+B2_FORCE_INLINE bool b2BroadPhase::TestOverlap(int proxyIdA, int proxyIdB) const
 {
     const b2AABB& aabbA = m_tree.GetFatAABB(proxyIdA);
     const b2AABB& aabbB = m_tree.GetFatAABB(proxyIdB);
     return b2TestOverlap(aabbA, aabbB);
 }
 
-B2_FORCE_INLINE const b2AABB& b2BroadPhase::GetFatAABB(int32 proxyId) const
+B2_FORCE_INLINE const b2AABB& b2BroadPhase::GetFatAABB(int proxyId) const
 {
     return m_tree.GetFatAABB(proxyId);
 }
@@ -204,17 +166,17 @@ B2_FORCE_INLINE const b2DynamicTree* b2BroadPhase::GetDynamicTree() const
     return &m_tree;
 }
 
-B2_FORCE_INLINE int32 b2BroadPhase::GetProxyCount() const
+B2_FORCE_INLINE int b2BroadPhase::GetProxyCount() const
 {
     return m_proxyCount;
 }
 
-B2_FORCE_INLINE int32 b2BroadPhase::GetTreeHeight() const
+B2_FORCE_INLINE int b2BroadPhase::GetTreeHeight() const
 {
     return m_tree.GetHeight();
 }
 
-B2_FORCE_INLINE int32 b2BroadPhase::GetTreeBalance() const
+B2_FORCE_INLINE int b2BroadPhase::GetTreeBalance() const
 {
     return m_tree.GetMaxBalance();
 }
@@ -225,90 +187,45 @@ B2_FORCE_INLINE b2Scalar b2BroadPhase::GetTreeQuality() const
 }
 
 template <typename T>
-void b2BroadPhase::UpdatePairs(T* callback)
+B2_FORCE_INLINE bool b2BroadPhase::Collide(T* callback, const b2AABB& aabb) const
 {
-    m_pairBuffer.clear();
-    // Perform tree queries for all moving proxies.
-    for (int32 i : m_moveBuffer)
-    {
-        m_queryProxyId = i;
-        if (m_queryProxyId == e_nullProxy)
-            continue;
-        // We have to query the tree with the fat AABB so that
-        // we don't fail to create a pair that may touch later.
-        const b2AABB& fatAABB = m_tree.GetFatAABB(m_queryProxyId);
-        // Query tree, create pairs and add them pair buffer.
-        m_tree.Query(this, fatAABB);
-    }
-
-    // Send pairs to caller
-    for (b2Pair primaryPair : m_pairBuffer)
-    {
-        void* userDataA = m_tree.GetUserData(primaryPair.proxyIdA);
-        void* userDataB = m_tree.GetUserData(primaryPair.proxyIdB);
-        callback->AddPair(userDataA, userDataB);
-    }
-
-    // Clear move flags
-    for (int32 proxyId : m_moveBuffer)
-    {
-        if (proxyId == e_nullProxy)
-            continue;
-        m_tree.ClearMoved(proxyId);
-    }
-
-    // Reset move buffer
-    m_moveBuffer.clear();
+    return m_tree.Collide(callback, aabb);
 }
 
 template <typename T>
-void b2BroadPhase::UpdateDistancePairs(T* callback)
+B2_FORCE_INLINE bool b2BroadPhase::Collide(T* callback, const b2Vec2& point) const
 {
-    m_pairBuffer.clear();
-    // Perform tree queries for all moving proxies.
-    for (int32 i : m_activeBuffer)
-    {
-        m_queryProxyId = i;
-        if (m_queryProxyId == e_nullProxy)
-            continue;
-        // We have to query the tree with the fat AABB so that
-        // we don't fail to create a pair that may touch later.
-        const b2AABB& fatAABB = m_tree.GetFatAABB(m_queryProxyId);
-        // Query tree, create pairs and add them pair buffer.
-        m_tree.QueryDistance(this, fatAABB);
-    }
-
-    // Send pairs to caller
-    for (b2Pair primaryPair : m_pairBuffer)
-    {
-        void* userDataA = m_tree.GetUserData(primaryPair.proxyIdA);
-        void* userDataB = m_tree.GetUserData(primaryPair.proxyIdB);
-        callback->AddPairDistance(userDataA, userDataB);
-    }
+    return m_tree.Collide(callback, point);
 }
 
 template <typename T>
-B2_FORCE_INLINE void b2BroadPhase::Query(T* callback, const b2AABB& aabb) const
+B2_FORCE_INLINE bool b2BroadPhase::Collide(T* callback, const b2BroadPhase* tree) const
 {
-    m_tree.Query(callback, aabb);
+    return m_tree.Collide(callback, tree->GetDynamicTree());
 }
 
 template <typename T>
-B2_FORCE_INLINE void b2BroadPhase::Query(T* callback, const b2Vec2& aabb) const
+B2_FORCE_INLINE bool b2BroadPhase::Distance(T* callback, const b2AABB& aabb, b2Scalar &dist) const
 {
-    m_tree.Query(callback, aabb);
+    return m_tree.Distance(callback, aabb, dist);
 }
 
 template <typename T>
-B2_FORCE_INLINE void b2BroadPhase::Query(T* callback, const b2BroadPhase* tree) const
+B2_FORCE_INLINE bool b2BroadPhase::Distance(T* callback, const b2Vec2& point, b2Scalar &dist) const
 {
-    m_tree.Query(callback, tree->GetDynamicTree());
+    return m_tree.Distance(callback, point, dist);
 }
 
 template <typename T>
-B2_FORCE_INLINE void b2BroadPhase::RayCast(T* callback, const b2RayCastInput& input) const
+B2_FORCE_INLINE bool b2BroadPhase::Distance(T* callback, const b2BroadPhase* tree, b2Scalar &dist) const
 {
-    m_tree.RayCast(callback, input);
+    return m_tree.Distance(callback, tree->GetDynamicTree(), dist);
+}
+
+template <typename T>
+B2_FORCE_INLINE bool b2BroadPhase::SelfDistance(T* callback, b2Scalar &dist) const
+{
+    return m_tree.SelfDistance(callback, dist);
 }
 
 B2_FORCE_INLINE void b2BroadPhase::ShiftOrigin(const b2Vec2& newOrigin)
@@ -316,12 +233,7 @@ B2_FORCE_INLINE void b2BroadPhase::ShiftOrigin(const b2Vec2& newOrigin)
     m_tree.ShiftOrigin(newOrigin);
 }
 
-B2_FORCE_INLINE bool b2BroadPhase::WasMoved(int32 proxyId) const
-{
-    return m_moveBuffer.find(proxyId) != m_moveBuffer.end();
-}
-
-B2_FORCE_INLINE bool b2BroadPhase::IsActive(int32 proxyId) const
+B2_FORCE_INLINE bool b2BroadPhase::IsActive(int proxyId) const
 {
     return m_activeBuffer.find(proxyId) != m_activeBuffer.end();
 }
@@ -334,6 +246,88 @@ B2_FORCE_INLINE void b2BroadPhase::setContactDistanceThreshold(b2Scalar contact_
 B2_FORCE_INLINE b2Scalar b2BroadPhase::getContactDistanceThreshold() const
 {
     return m_tree.getContactDistanceThreshold();
+}
+
+template <typename T>
+struct b2BroadPhaseCollideWrapper
+{
+    // This is called from b2DynamicTree::Collide.
+    bool CollideCallback(int proxyId)
+    {
+        // A proxy cannot form a pair with itself.
+        if (proxyId == broadPhase->GetQueryProxyId())
+            return false;
+        if (broadPhase->IsActive(proxyId) && proxyId > broadPhase->GetQueryProxyId())
+            // Both proxies are moving. Avoid duplicate pairs.
+            return false;
+        void* userDataA = broadPhase->GetUserData(proxyId);
+        void* userDataB = broadPhase->GetUserData(broadPhase->GetQueryProxyId());
+        return callback->Collide(userDataA, userDataB);
+    }
+    const b2BroadPhase* broadPhase{nullptr};
+    T* callback{nullptr};
+};
+
+template <typename T>
+bool b2BroadPhase::Collide(T* callback)
+{
+    b2BroadPhaseCollideWrapper<T> wrapper;
+    wrapper.broadPhase = this;
+    wrapper.callback = callback;
+    // Perform tree queries for all moving proxies.
+    for (int i : m_activeBuffer)
+    {
+        m_queryProxyId = i;
+        if (m_queryProxyId == e_nullProxy)
+            continue;
+        // We have to query the tree with the fat AABB so that
+        // we don't fail to create a pair that may touch later.
+        const b2AABB& fatAABB = m_tree.GetFatAABB(m_queryProxyId);
+        if (m_tree.Collide(&wrapper, fatAABB))
+            return true;
+    }
+    return false;
+}
+
+template <typename T>
+struct b2BroadPhaseDistanceWrapper
+{
+    // This is called from b2DynamicTree::Distance.
+    bool DistanceCallback(int proxyId, b2Scalar &dist)
+    {
+        // A proxy cannot form a pair with itself.
+        if (proxyId == broadPhase->GetQueryProxyId())
+            return false;
+        if (broadPhase->IsActive(proxyId) && proxyId > broadPhase->GetQueryProxyId())
+            // Both proxies are moving. Avoid duplicate pairs.
+            return false;
+        void* userDataA = broadPhase->GetUserData(proxyId);
+        void* userDataB = broadPhase->GetUserData(broadPhase->GetQueryProxyId());
+        return callback->Distance(userDataA, userDataB, dist);
+    }
+    const b2BroadPhase* broadPhase{nullptr};
+    T* callback{nullptr};
+};
+
+template <typename T>
+bool b2BroadPhase::Distance(T* callback, b2Scalar &dist)
+{
+    b2BroadPhaseDistanceWrapper<T> wrapper;
+    wrapper.broadPhase = this;
+    wrapper.callback = callback;
+    // Perform tree queries for all moving proxies.
+    for (int i : m_activeBuffer)
+    {
+        m_queryProxyId = i;
+        if (m_queryProxyId == e_nullProxy)
+            continue;
+        // We have to query the tree with the fat AABB so that
+        // we don't fail to create a pair that may touch later.
+        const b2AABB& fatAABB = m_tree.GetFatAABB(m_queryProxyId);
+        if (!m_tree.Distance(&wrapper, fatAABB, dist))
+            return false;
+    }
+    return true;
 }
 
 #endif
