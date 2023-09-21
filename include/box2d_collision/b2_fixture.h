@@ -256,9 +256,8 @@ B2_FORCE_INLINE const b2AABB& b2Fixture::GetAABB() const
     b2Transform xf = m_body->GetTransform();
     if (!m_identity)
         xf = b2Mul(xf, m_xf);
-    b2AABB aabb;
-    m_shape->ComputeAABB(&aabb, xf);
-    return aabb;
+    m_shape->ComputeAABB(&m_proxies->aabb, xf);
+    return m_proxies->aabb;
 }
 
 B2_FORCE_INLINE	int b2Fixture::GetProxyId() const

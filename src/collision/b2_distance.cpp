@@ -272,6 +272,15 @@ void extractClosestPoints(const b2Simplex &simplex, b2Vec2 &p1, b2Vec2 &p2, cons
         extractObjectPointsFromSegment(simplex.At(0), simplex.At(1), p1, p2, p);
 }
 
+bool bisectionOptimal(const b2Vec2 &dir, const b2Vec2 &point, b2Scalar tol, b2Scalar &normal)
+{
+    normal = b2Cross(point, dir);
+    if (b2Abs(normal) < tol)
+        return true;
+    normal /= b2Abs(normal);
+    return false;
+}
+
 bool ccdSeparation(const b2MinkowskiDiff &shape, b2Simplex &simplex, int max_iterations, b2Scalar tol)
 {
     b2Vec2 dir(1.0, 0.0); // direction vector
@@ -326,6 +335,329 @@ b2Scalar ccdDistance(const b2MinkowskiDiff &shape, b2Simplex &simplex, int max_i
     extractClosestPoints(simplex, p1, p2, closest_p);
     return last_dist;
 }
+
+// A negative return value means separation
+b2Scalar bisectionDistance(const b2MinkowskiDiff& shape, b2Vec2 &dir, int max_iterations, b2Scalar tol, b2Vec2 &p1, b2Vec2 &p2)
+/*
+{ // angle bisection
+    b2Simplex simplex;
+    if (!ccdSeparation(shape, simplex, max_iterations, tol))
+        return b2Scalar(1.0);
+
+    b2Scalar last_dist = b2_maxFloat;
+    b2Vec2 closest_p; // The point on the simplex that is closest to the
+    simplexClosestP(simplex, closest_p, last_dist);
+
+    b2Vec2 dir = (-closest_p).Normalized(), last = shape.Support(dir); // last support point
+    last_dist = b2Dot(dir, last);
+
+    b2Scalar normal, tnormal; // steepest rotation direction
+    if (bisectionOptimal(dir, last, -last_dist * tol, normal))
+    {
+        //extractClosestPoints(simplex, p1, p2, closest_p);
+        return last_dist;
+    }
+
+    b2Vec2 pdir = dir, best_support = last;
+    b2Scalar dist = 0.0;
+    int iterations = 0;
+    for (; iterations < max_iterations; ++iterations) // find the bisection bounds
+    {
+        b2Scalar llen = last.Length();
+        dir = (-last) / llen;
+        last = shape.Support(dir);
+        dist = b2Dot(dir, last);
+        if (dist + llen < tol) // todo
+        {
+            return b2Min(dist, last_dist);
+        }
+        if (dist >= last_dist)
+            break;
+        tnormal = b2Cross(last, dir);
+        b2Scalar dot = tnormal * normal;
+        if (dot < -tol)
+        {
+            //if (last_dist - dist < 10.0 * tol)
+            break;
+        }
+        else if (dot <= tol)
+        {
+            return dist;
+        }
+        pdir = dir;
+        last_dist = dist;
+        best_support = last;
+        normal = tnormal / b2Abs(tnormal);
+    }
+
+    bool last_best = true;
+    if (dist < last_dist)
+    {
+        last_best = false;
+        last_dist = dist;
+        best_support = last;
+    }
+    b2Scalar angle = b2Acos(b2Dot(pdir, dir));
+    for (; iterations < max_iterations; ++iterations) // bisection core
+    {
+        angle *= 0.5;
+        b2Vec2 tdir = 0.5 * (pdir + dir);
+        tdir.Normalize();
+        if (b2Dot(tdir, best_support) > last_dist)
+        {
+            if (last_best)
+                dir = tdir;
+            else 
+                pdir = tdir;
+            continue;
+        }
+        last = shape.Support(tdir);
+        dist = b2Dot(tdir, last);
+        if (dist > last_dist)
+        {
+            if (last_best)
+                dir = tdir;
+            else 
+                pdir = tdir;
+            continue;
+        }
+        if (last_dist - dist < tol)
+        {
+            return dist;
+        }
+        last_dist = dist;
+        if (last.IsApprox(best_support, tol))
+            return last_dist;
+        tnormal = b2Cross(last, tdir);
+        b2Scalar dot = tnormal * normal;
+        if (dot > tol)
+        {
+            pdir = tdir;
+            last_best = true;
+        }
+        else if (dot < -tol) 
+        {
+            dir = tdir;
+            last_best = false;
+        }
+        else 
+        {
+            return last_dist;
+        }
+        if (angle < tol)
+        {
+            return last_dist;
+        }
+        best_support = last;
+    }
+    return last_dist;
+}
+*/
+{
+    b2Vec2 last = shape.Support(dir); // last support point
+    b2Scalar last_dist = b2Dot(dir, last);
+
+    b2Scalar normal, tnormal; // steepest rotation direction
+    if (bisectionOptimal(dir, last, -last_dist * tol, normal))
+    {
+        //extractClosestPoints(simplex, p1, p2, closest_p);
+        return last_dist;
+    }
+
+    b2Vec2 pdir = dir, best_support = last;
+    b2Scalar dist = 0.0;
+    int iterations = 0;
+    for (; iterations < max_iterations; ++iterations) // find the bisection bounds
+    {
+        b2Scalar llen = last.Length();
+        dir = (-last) / llen;
+        last = shape.Support(dir);
+        dist = b2Dot(dir, last);
+        if (dist + llen < tol) // todo
+        {
+            return b2Min(dist, last_dist);
+        }
+        if (dist >= last_dist)
+            break;
+        tnormal = b2Cross(last, dir);
+        b2Scalar dot = tnormal * normal;
+        if (dot < -tol)
+        {
+            //if (last_dist - dist < 10.0 * tol)
+            break;
+        }
+        else if (dot <= tol)
+        {
+            return dist;
+        }
+        pdir = dir;
+        last_dist = dist;
+        best_support = last;
+        normal = tnormal / b2Abs(tnormal);
+    }
+
+    bool last_best = true;
+    if (dist < last_dist)
+    {
+        last_best = false;
+        last_dist = dist;
+        best_support = last;
+    }
+    b2Vec2 tdir;
+    for (; iterations < max_iterations; ++iterations) // bisection core
+    {
+        if (last_best)
+            tdir = 0.618 * pdir + 0.382 * dir;
+        else 
+            tdir = 0.618 * dir + 0.382 * pdir;
+        tdir.Normalize();
+        if (b2Dot(tdir, best_support) > last_dist)
+        {
+            if (last_best)
+                dir = tdir;
+            else 
+                pdir = tdir;
+            continue;
+        }
+        last = shape.Support(tdir);
+        dist = b2Dot(tdir, last);
+        if (dist > last_dist)
+        {
+            if (last_best)
+                dir = tdir;
+            else 
+                pdir = tdir;
+            continue;
+        }
+        if (last_dist - dist < tol)
+        {
+            return dist;
+        }
+        last_dist = dist;
+        if (last.IsApprox(best_support, tol))
+            return last_dist;
+        tnormal = b2Cross(last, tdir);
+        b2Scalar dot = tnormal * normal;
+        if (dot > tol)
+        {
+            pdir = tdir;
+            last_best = true;
+        }
+        else if (dot < -tol) 
+        {
+            dir = tdir;
+            last_best = false;
+        }
+        else 
+        {
+            return last_dist;
+        }
+        if ((pdir - dir).LengthSquared() < tol)
+        {
+            return last_dist;
+        }
+        best_support = last;
+    }
+    return last_dist;
+}
+/*
+{ // direction perpendicular to the support segment
+    b2Simplex simplex;
+    if (!ccdSeparation(shape, simplex, max_iterations, tol))
+        return b2Scalar(1.0);
+
+    b2Scalar last_dist = b2_maxFloat;
+    b2Vec2 closest_p; // The point on the simplex that is closest to the
+    simplexClosestP(simplex, closest_p, last_dist);
+
+    b2Vec2 dir = (-closest_p).Normalized(), last = shape.Support(dir); // last support point
+    last_dist = b2Dot(dir, last);
+
+    b2Scalar normal, tnormal; // steepest rotation direction
+    if (bisectionOptimal(dir, last, -last_dist * tol, normal))
+    {
+        //extractClosestPoints(simplex, p1, p2, closest_p);
+        return last_dist;
+    }
+
+    b2Vec2 current;
+    b2Scalar dist = 0.0;
+    int iterations = 0;
+    for (; iterations < max_iterations; ++iterations) // find the bisection bounds
+    {
+        b2Scalar llen = last.Length();
+        dir = (-last) / llen;
+        current = shape.Support(dir);
+        dist = b2Dot(dir, current);
+        if (dist + llen < tol) // todo
+        {
+            return b2Min(dist, last_dist);
+        }
+        if (dist >= last_dist)
+            break;
+        tnormal = b2Cross(current, dir);
+        b2Scalar dot = tnormal * normal;
+        if (dot < -tol)
+        {
+            //if (last_dist - dist < 10.0 * tol)
+                break;
+        }
+        else if (dot <= tol)
+        {
+            return dist;
+        }
+        last = current;
+        last_dist = dist;
+        normal = tnormal / b2Abs(tnormal);
+    }
+
+    bool last_best = true;
+    if (dist < last_dist)
+    {
+        last_best = false;
+        last_dist = dist;
+    }
+    for (; iterations < max_iterations; ++iterations) // bisection core
+    {
+        if (normal < b2Scalar(0.0))
+            dir = b2Cross(last - current, b2Scalar(1.0)).Normalized();
+        else
+            dir = b2Cross(b2Scalar(1.0), last - current).Normalized();
+        b2Vec2 temp = shape.Support(dir);
+        dist = b2Dot(dir, temp);
+        if (dist > last_dist)
+        {
+            if (last_best)
+                current = temp;
+            else 
+                last = temp;
+            continue;
+        }
+        last_dist = dist;
+        if (b2Dot(dir, temp - last) < tol) // todo
+        {
+            return last_dist;
+        }
+        tnormal = b2Cross(temp, dir);
+        b2Scalar dot = tnormal * normal;
+        if (dot > tol)
+        {
+            last = temp;
+            last_best = true;
+        }
+        else if (dot < -tol) 
+        {
+            current = temp;
+            last_best = false;
+        }
+        else 
+        {
+            return last_dist;
+        }
+    }
+    return last_dist;
+}
+*/
 
 bool simplexToPolytope2(const b2MinkowskiDiff &shape, b2Simplex &simplex, b2Polytope &polytope)
 {
@@ -523,6 +855,79 @@ bool b2ShapeDistance::SignedDistance(const b2Shape* shape1, const b2Transform &x
         d = ccdDistance(shape, simplex, max_distance_iterations, distance_tolerance, p1_, p2_);
     else 
         d = -ccdPenetration(shape, simplex, max_distance_iterations, distance_tolerance, p1_, p2_);
+    if (dist) *dist = d;
+    if (p1) *p1 = b2Mul(xf1, p1_);
+    if (p2) *p2 = b2Mul(xf1, p2_);
+    if (d > b2Scalar(0.0))
+        return true;
+    else 
+        return false;
+}
+
+bool b2ShapeDistance::BisectionDistance(const b2Shape* shape1, const b2Transform &xf1,
+        const b2Shape* shape2, const b2Transform &xf2,
+        b2Scalar *dist, b2Vec2 *p1, b2Vec2 *p2) const
+{
+    b2MinkowskiDiff shape;
+    shape.shapes[0] = shape1;
+    shape.shapes[1] = shape2;
+    shape.toshape1 = b2MulT(xf2.q, xf1.q);
+    shape.toshape0 = b2MulT(xf1, xf2);
+
+    b2Simplex simplex;
+    if (!ccdSeparation(shape, simplex, max_distance_iterations, distance_tolerance))
+    {
+        if (dist) *dist = b2Scalar(-1.0);
+        return false;
+    }
+
+    b2Scalar last_dist = b2_maxFloat;
+    b2Vec2 closest_p; // The point on the simplex that is closest to the
+    simplexClosestP(simplex, closest_p, last_dist);
+    b2Vec2 dir = (-closest_p).Normalized();
+    
+    b2Vec2 p1_, p2_;
+    b2Scalar d = -bisectionDistance(shape, dir, max_distance_iterations, distance_tolerance, p1_, p2_);
+    if (dist) *dist = d;
+    if (d > b2Scalar(0.0))
+    {
+        if (p1) *p1 = b2Mul(xf1, p1_);
+        if (p2) *p2 = b2Mul(xf1, p2_);
+        return true;
+    }
+    else 
+        return false;
+}
+
+bool b2ShapeDistance::SignedBisectionDistance(const b2Shape* shape1, const b2Transform &xf1,
+        const b2Shape* shape2, const b2Transform &xf2,
+        b2Scalar *dist, b2Vec2 *p1, b2Vec2 *p2) const
+{
+    b2MinkowskiDiff shape;
+    shape.shapes[0] = shape1;
+    shape.shapes[1] = shape2;
+    shape.toshape1 = b2MulT(xf2.q, xf1.q);
+    shape.toshape0 = b2MulT(xf1, xf2);
+
+    b2Vec2 dir;
+    b2Simplex simplex;
+    if (ccdSeparation(shape, simplex, max_distance_iterations, distance_tolerance))
+    {
+        b2Scalar last_dist = b2_maxFloat;
+        b2Vec2 closest_p;
+        simplexClosestP(simplex, closest_p, last_dist);
+        dir = (-closest_p).Normalized();
+    }
+    else 
+    {
+        dir = b2Vec2(1.0, 0.0);
+        //b2Vec2 last = shape.Support(dir);
+        //b2Scalar dist = b2Dot(dir, last);
+    }
+
+    b2Vec2 p1_, p2_;
+    b2Scalar d = -bisectionDistance(shape, dir, max_distance_iterations, distance_tolerance, p1_, p2_);
+
     if (dist) *dist = d;
     if (p1) *p1 = b2Mul(xf1, p1_);
     if (p2) *p2 = b2Mul(xf1, p2_);

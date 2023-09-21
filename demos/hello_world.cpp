@@ -62,6 +62,5 @@ int main()
     dist.SignedDistance(&circle1, b2Transform(), &circle2, b2Transform(-1.0, 0.0, 0.0), &d, &p1, &p2);
     std::cout << "d = " << d << " p1 = (" << p1.x << ", " << p1.y << ") p2 = (" << p2.x << ", " << p2.y << ")" << std::endl;
 
-
     return 0;
 }
