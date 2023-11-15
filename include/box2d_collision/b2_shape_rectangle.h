@@ -24,56 +24,35 @@
 
 #include "b2_shape.h"
 
-/// A solid rectangle shape. 
+/// A solid rectangle shape.
 class B2_API b2RectangleShape : public b2Shape
 {
 public:
-    b2RectangleShape();
+  b2RectangleShape();
 
-    b2RectangleShape(b2Scalar hx, b2Scalar hy);
+  b2RectangleShape(b2Scalar hx, b2Scalar hy);
 
-    /// @param hx the half-width.
-    /// @param hy the half-height.
-    void Set(b2Scalar hx, b2Scalar hy);
+  /// @param hx the half-width.
+  /// @param hy the half-height.
+  void Set(b2Scalar hx, b2Scalar hy);
 
-    const b2Vec2& GetHalfSides() const;
+  const b2Vec2 & GetHalfSides() const;
 
-    /// Implement b2Shape.
-    b2Shape* Clone(b2BlockAllocator* allocator) const override;
+  /// Implement b2Shape.
+  b2Shape * Clone(b2BlockAllocator * allocator) const override;
 
-    /// @see b2Shape::TestPoint
-    bool TestPoint(const b2Transform& transform, const b2Vec2& p) const override;
+  /// @see b2Shape::TestPoint
+  bool TestPoint(const b2Transform & transform, const b2Vec2 & p) const override;
 
-    /// @see b2Shape::ComputeAABB
-    void ComputeAABB(b2AABB* aabb, const b2Transform& transform) const override;
+  /// @see b2Shape::ComputeAABB
+  void ComputeAABB(b2AABB * aabb, const b2Transform & transform) const override;
 
-    bool InscribedSphereAtPoint(const b2Vec2& inp, const b2Vec2& bdp, const b2Vec2& normal, b2Vec2& local_center, b2Scalar &radius) const override;
+  bool InscribedSphereAtPoint(const b2Vec2 & inp, const b2Vec2 & bdp, const b2Vec2 & normal, b2Vec2 & local_center, b2Scalar & radius) const override;
 
-    b2Vec2 SupportPoint(const b2Vec2& dir) const override;
+  b2Vec2 SupportPoint(const b2Vec2 & dir) const override;
 
 private:
-    b2Vec2 m_hsides;
+  b2Vec2 m_hsides;
 };
-
-B2_FORCE_INLINE b2RectangleShape::b2RectangleShape()
-{
-    m_type = e_rectangle;
-}
-
-B2_FORCE_INLINE b2RectangleShape::b2RectangleShape(b2Scalar hx, b2Scalar hy)
-{
-    m_type = e_rectangle;
-    m_hsides.Set(hx, hy);
-}
-
-B2_FORCE_INLINE void b2RectangleShape::Set(b2Scalar hx, b2Scalar hy)
-{
-    m_hsides.Set(hx, hy);
-}
-
-B2_FORCE_INLINE const b2Vec2& b2RectangleShape::GetHalfSides() const
-{
-    return m_hsides;
-}
 
 #endif

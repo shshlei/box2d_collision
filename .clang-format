@@ -1,0 +1,76 @@
+# Modified from https://github.com/ament/ament_lint/blob/master/ament_clang_format/ament_clang_format/configuration/.clang-format
+Language: Cpp
+BasedOnStyle: Google
+
+AccessModifierOffset: -2
+AlignAfterOpenBracket: DontAlign 
+AllowShortFunctionsOnASingleLine: InlineOnly
+BraceWrapping:
+  # case 语句后面
+  AfterCaseLabel: true
+  # class定义后面
+  AfterClass: true
+  # 控制语句后面
+  AfterControlStatement: Never
+  # enum定义后面
+  AfterEnum: true
+  # 函数定义后面
+  AfterFunction: true
+  # 命名空间定义后面
+  AfterNamespace: true 
+  # ObjC定义后面
+  AfterObjCDeclaration: false
+  # struct定义后面
+  AfterStruct: true
+  # union定义后面
+  AfterUnion: true
+  # extern 导出块后面
+  AfterExternBlock: false
+  # catch之前
+  BeforeCatch: true
+  # else之前
+  BeforeElse: true
+  # 缩进大括号(整个大括号框起来的部分都缩进)
+  IndentBraces: false
+  # 空函数的大括号是否可以在一行
+  SplitEmptyFunction: false
+  # 空记录体(struct/class/union)的大括号是否可以在一行
+  SplitEmptyRecord: false
+  # 空名字空间的大括号是否可以在一行
+  SplitEmptyNamespace: false
+
+BreakBeforeBraces: Custom
+ColumnLimit: 0
+ConstructorInitializerIndentWidth: 0
+ContinuationIndentWidth: 2
+DerivePointerAlignment: false
+PointerAlignment: Middle
+ReflowComments: true
+IncludeCategories:
+  # C++ system headers
+  - Regex: <[a-z_]*>
+    Priority: 6
+    #CaseSensitive: true
+  # C system headers
+  - Regex: <.*\.h>
+    Priority: 5
+    #CaseSensitive: true
+  # Boost headers
+  - Regex: boost/.*
+    Priority: 4
+    #CaseSensitive: true
+  # Message headers
+  - Regex: .*_msgs/.*
+    Priority: 3
+    #CaseSensitive: true
+  - Regex: .*_srvs/.*
+    Priority: 3
+    #CaseSensitive: true
+  # Other Package headers
+  - Regex: <.*>
+    Priority: 2
+    #CaseSensitive: true
+  # Local package headers
+  - Regex: '".*"'
+    Priority: 1
+    #CaseSensitive: true

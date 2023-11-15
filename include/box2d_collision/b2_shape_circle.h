@@ -29,50 +29,29 @@
 class B2_API b2CircleShape : public b2Shape
 {
 public:
-    b2CircleShape();
+  b2CircleShape();
 
-    b2CircleShape(b2Scalar r);
+  b2CircleShape(b2Scalar r);
 
-    void SetRadius(b2Scalar r);
+  void SetRadius(b2Scalar r);
 
-    b2Scalar GetRadius() const;
+  b2Scalar GetRadius() const;
 
-    /// Implement b2Shape.
-    b2Shape* Clone(b2BlockAllocator* allocator) const override;
+  /// Implement b2Shape.
+  b2Shape * Clone(b2BlockAllocator * allocator) const override;
 
-    /// Implement b2Shape.
-    bool TestPoint(const b2Transform& transform, const b2Vec2& p) const override;
+  /// Implement b2Shape.
+  bool TestPoint(const b2Transform & transform, const b2Vec2 & p) const override;
 
-    /// @see b2Shape::ComputeAABB
-    void ComputeAABB(b2AABB* aabb, const b2Transform& transform) const override;
+  /// @see b2Shape::ComputeAABB
+  void ComputeAABB(b2AABB * aabb, const b2Transform & transform) const override;
 
-    bool InscribedSphereAtPoint(const b2Vec2& inp, const b2Vec2& bdp, const b2Vec2& normal, b2Vec2& local_center, b2Scalar &radius) const override;
+  bool InscribedSphereAtPoint(const b2Vec2 & inp, const b2Vec2 & bdp, const b2Vec2 & normal, b2Vec2 & local_center, b2Scalar & radius) const override;
 
-    b2Vec2 SupportPoint(const b2Vec2& dir) const override;
+  b2Vec2 SupportPoint(const b2Vec2 & dir) const override;
 
-    b2Scalar m_radius;
+private:
+  b2Scalar m_radius;
 };
-
-B2_FORCE_INLINE b2CircleShape::b2CircleShape()
-{
-    m_type = e_circle;
-    m_radius = b2Scalar(0.0);
-}
-
-B2_FORCE_INLINE b2CircleShape::b2CircleShape(b2Scalar r)
-{
-    m_type = e_circle;
-    m_radius = r;
-}
-
-B2_FORCE_INLINE void b2CircleShape::SetRadius(b2Scalar r)
-{
-    m_radius = r;
-}
-
-B2_FORCE_INLINE b2Scalar b2CircleShape::GetRadius() const
-{
-    return m_radius;
-}
 
 #endif

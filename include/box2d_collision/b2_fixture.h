@@ -24,67 +24,78 @@
 #define B2_FIXTURE_H
 
 #include "b2_body.h"
-#include "b2_collision.h"
 
 class b2BlockAllocator;
 class b2Body;
 class b2BroadPhase;
 class b2Fixture;
 
+/// You can define this to inject whatever data you want in b2Fixture
+struct B2_API b2FixtureUserData
+{
+  b2FixtureUserData()
+  {
+    pointer = 0;
+  }
+
+  /// For legacy compatibility
+  uintptr_t pointer;
+};
+
 /// This holds contact filtering data.
 struct B2_API b2Filter
 {
-    b2Filter()
-    {
-        categoryBits = 0x0001;
-        maskBits = 0xFFFF;
-        groupIndex = 0;
-    }
+  b2Filter()
+  {
+    categoryBits = 0x0001;
+    maskBits = 0xFFFF;
+    groupIndex = 0;
+  }
 
-    /// The collision category bits. Normally you would just set one bit.
-    unsigned short categoryBits;
+  /// The collision category bits. Normally you would just set one bit.
+  unsigned short categoryBits;
 
-    /// The collision mask bits. This states the categories that this
-    /// shape would accept for collision.
-    unsigned short maskBits;
+  /// The collision mask bits. This states the categories that this
+  /// shape would accept for collision.
+  unsigned short maskBits;
 
-    /// Collision groups allow a certain group of objects to never collide (negative)
-    /// or always collide (positive). Zero means no collision group. Non-zero group
-    /// filtering always wins against the mask bits.
-    short groupIndex;
+  /// Collision groups allow a certain group of objects to never collide (negative)
+  /// or always collide (positive). Zero means no collision group. Non-zero group
+  /// filtering always wins against the mask bits.
+  short groupIndex;
 };
 
 /// A fixture definition is used to create a fixture. This class defines an
 /// abstract fixture definition. You can reuse fixture definitions safely.
 struct B2_API b2FixtureDef
 {
-    /// The constructor sets the default fixture definition values.
-    b2FixtureDef()
-    {
-        shape = nullptr;
-    }
+  /// The constructor sets the default fixture definition values.
+  b2FixtureDef()
+  {
+    shape = nullptr;
+  }
 
-    /// The shape, this must be set. The shape will be cloned, so you
-    /// can create the shape on the stack.
-    const b2Shape* shape;
+  /// The shape, this must be set. The shape will be cloned, so you
+  /// can create the shape on the stack.
+  const b2Shape * shape;
 
-    /// The local transform.
-    b2Transform xf;
+  /// The local transform.
+  b2Transform xf;
 
-    /// Use this to store application specific fixture data.
-    b2FixtureUserData userData;
+  /// Use this to store application specific fixture data.
+  b2FixtureUserData userData;
 
-    /// Contact filtering data.
-    b2Filter filter;
+  /// Contact filtering data.
+  b2Filter filter;
 };
 
 /// This proxy is used internally to connect fixtures to the broad-phase.
 struct B2_API b2FixtureProxy
 {
-    b2AABB aabb;        // un-expanded aabb
-    b2Fixture* fixture;
-    b2Transform xf;     // global transform
-    int proxyId;
+  b2AABB aabb;  // un-expanded aabb
+  b2Fixture * fixture;
+  b2Transform xf;  // global transform
+  int proxyId;
 };
 
 /// A fixture is used to attach a shape to a body for collision detection. A fixture
@@ -94,185 +105,88 @@ struct B2_API b2FixtureProxy
 class B2_API b2Fixture
 {
 public:
-    /// Get the type of the child shape. You can use this to down cast to the concrete shape.
-    /// @return the shape type.
-    b2Shape::Type GetType() const;
+  /// Get the type of the child shape. You can use this to down cast to the concrete shape.
+  /// @return the shape type.
+  b2Shape::Type GetType() const;
 
-    /// Get the child shape. You can modify the child shape, however you should not change the
-    /// number of vertices because this will crash some collision caching mechanisms.
-    /// Manipulating the shape may lead to non-physical behavior.
-    b2Shape* GetShape();
-    const b2Shape* GetShape() const;
-    
-    /// Set the contact filtering data. This will not update contacts until the next time
-    /// step when either parent body is active and awake.
-    /// This automatically calls Refilter.
-    void SetFilterData(const b2Filter& filter);
+  /// Get the child shape. You can modify the child shape, however you should not change the
+  /// number of vertices because this will crash some collision caching mechanisms.
+  /// Manipulating the shape may lead to non-physical behavior.
+  b2Shape * GetShape();
+  const b2Shape * GetShape() const;
 
-    /// Get the contact filtering data.
-    const b2Filter& GetFilterData() const;
+  /// Set the contact filtering data. This will not update contacts until the next time
+  /// step when either parent body is active and awake.
+  /// This automatically calls Refilter.
+  void SetFilterData(const b2Filter & filter);
 
-    /// Get the parent body of this fixture. This is nullptr if the fixture is not attached.
-    /// @return the parent body.
-    b2Body* GetBody();
-    const b2Body* GetBody() const;
+  /// Get the contact filtering data.
+  const b2Filter & GetFilterData() const;
 
-    /// Get the next fixture in the parent body's fixture list.
-    /// @return the next shape.
-    b2Fixture* GetNext();
-    const b2Fixture* GetNext() const;
+  /// Get the parent body of this fixture. This is nullptr if the fixture is not attached.
+  /// @return the parent body.
+  b2Body * GetBody();
+  const b2Body * GetBody() const;
 
-    void SetUserData(const b2FixtureUserData& userData);
+  /// Get the next fixture in the parent body's fixture list.
+  /// @return the next shape.
+  b2Fixture * GetNext();
+  const b2Fixture * GetNext() const;
 
-    /// Get the user data that was assigned in the fixture definition. Use this to
-    /// store your application specific data.
-    b2FixtureUserData& GetUserData();
-    const b2FixtureUserData& GetUserData() const;
+  void SetUserData(const b2FixtureUserData & userData);
 
-    /// Test a point for containment in this fixture.
-    /// @param p a point in world coordinates.
-    bool TestPoint(const b2Vec2& p) const;
+  /// Get the user data that was assigned in the fixture definition. Use this to
+  /// store your application specific data.
+  b2FixtureUserData & GetUserData();
+  const b2FixtureUserData & GetUserData() const;
 
-    /// Get the fixture's AABB. This AABB may be enlarge and/or stale.
-    /// If you need a more accurate AABB, compute it using the shape and
-    /// the body transform.
-    const b2AABB& GetAABB() const;
+  /// Test a point for containment in this fixture.
+  /// @param p a point in world coordinates.
+  bool TestPoint(const b2Vec2 & p) const;
 
-    int GetProxyId() const;
+  /// Get the fixture's AABB. This AABB may be enlarge and/or stale.
+  /// If you need a more accurate AABB, compute it using the shape and
+  /// the body transform.
+  const b2AABB & GetAABB() const;
 
-    const b2Transform& GetLocalTransform() const;
+  int GetProxyId() const;
 
-    const b2Transform& GetGlobalTransform() const;
+  const b2Transform & GetLocalTransform() const;
+
+  const b2Transform & GetGlobalTransform() const;
 
 protected:
+  friend class b2Body;
+  friend class b2Contact;
+  friend class b2BVHManager;
 
-    friend class b2Body;
-    friend class b2Contact;
-    friend class b2BVHManager;
+  b2Fixture();
 
-    b2Fixture();
+  // We need separation create/destroy functions from the constructor/destructor because
+  // the destructor cannot access the allocator (no destructor arguments allowed by C++).
+  void Create(b2BlockAllocator * allocator, b2Body * body, const b2FixtureDef * def);
+  void Destroy(b2BlockAllocator * allocator);
 
-    // We need separation create/destroy functions from the constructor/destructor because
-    // the destructor cannot access the allocator (no destructor arguments allowed by C++).
-    void Create(b2BlockAllocator* allocator, b2Body* body, const b2FixtureDef* def);
-    void Destroy(b2BlockAllocator* allocator);
+  // These support body activation/deactivation.
+  void CreateProxies(b2BroadPhase * broadPhase, const b2Transform & xf, bool active = true);
+  void UpdateProxies(b2BroadPhase * broadPhase, bool active);
+  void DestroyProxies(b2BroadPhase * broadPhase);
+  void Update(b2BroadPhase * broadPhase, const b2Transform & xf);
 
-    // These support body activation/deactivation.
-    void CreateProxies(b2BroadPhase* broadPhase, const b2Transform& xf, bool active = true);
-    void UpdateProxies(b2BroadPhase* broadPhase, bool active);
-    void DestroyProxies(b2BroadPhase* broadPhase);
-    void Update(b2BroadPhase* broadPhase, const b2Transform& xf);
+  b2Fixture * m_next;
 
-    b2Fixture* m_next;
+  b2Shape * m_shape;
+  b2Body * m_body;
 
-    b2Shape* m_shape;
-    b2Body* m_body;
+  // Local transform
+  b2Transform m_xf;
+  bool m_identity;
 
-    // Local transform
-    b2Transform m_xf;
-    bool m_identity;
+  b2FixtureProxy * m_proxies;
 
-    b2FixtureProxy* m_proxies;
+  b2Filter m_filter;
 
-    b2Filter m_filter;
-
-    b2FixtureUserData m_userData;
+  b2FixtureUserData m_userData;
 };
-
-B2_FORCE_INLINE b2Shape::Type b2Fixture::GetType() const
-{
-    return m_shape->GetType();
-}
-
-B2_FORCE_INLINE b2Shape* b2Fixture::GetShape()
-{
-    return m_shape;
-}
-
-B2_FORCE_INLINE const b2Shape* b2Fixture::GetShape() const
-{
-    return m_shape;
-}
-
-B2_FORCE_INLINE void b2Fixture::SetFilterData(const b2Filter& filter)
-{
-    m_filter = filter;
-}
-
-B2_FORCE_INLINE const b2Filter& b2Fixture::GetFilterData() const
-{
-    return m_filter;
-}
-
-B2_FORCE_INLINE void b2Fixture::SetUserData(const b2FixtureUserData& userData)
-{
-    m_userData = userData;
-}
-
-B2_FORCE_INLINE b2FixtureUserData& b2Fixture::GetUserData()
-{
-    return m_userData;
-}
-
-B2_FORCE_INLINE const b2FixtureUserData& b2Fixture::GetUserData() const
-{
-    return m_userData;
-}
-
-B2_FORCE_INLINE b2Body* b2Fixture::GetBody()
-{
-    return m_body;
-}
-
-B2_FORCE_INLINE const b2Body* b2Fixture::GetBody() const
-{
-    return m_body;
-}
-
-B2_FORCE_INLINE b2Fixture* b2Fixture::GetNext()
-{
-    return m_next;
-}
-
-B2_FORCE_INLINE const b2Fixture* b2Fixture::GetNext() const
-{
-    return m_next;
-}
-
-B2_FORCE_INLINE bool b2Fixture::TestPoint(const b2Vec2& p) const
-{
-    if (m_proxies->fixture)
-        return m_shape->TestPoint(m_proxies->xf, p);
-    if (m_identity)
-        return m_shape->TestPoint(m_body->GetTransform(), p);
-    else
-        return m_shape->TestPoint(b2Mul(m_body->GetTransform(), m_xf), p);
-}
-
-B2_FORCE_INLINE const b2AABB& b2Fixture::GetAABB() const
-{
-    if (m_proxies->fixture)
-        return m_proxies->aabb;
-    b2Transform xf = m_body->GetTransform();
-    if (!m_identity)
-        xf = b2Mul(xf, m_xf);
-    m_shape->ComputeAABB(&m_proxies->aabb, xf);
-    return m_proxies->aabb;
-}
-
-B2_FORCE_INLINE	int b2Fixture::GetProxyId() const
-{
-    return m_proxies->proxyId;
-}
-
-B2_FORCE_INLINE const b2Transform& b2Fixture::GetLocalTransform() const
-{
-    return m_xf;
-}
-
-B2_FORCE_INLINE const b2Transform& b2Fixture::GetGlobalTransform() const
-{
-    return m_proxies->xf;
-}
 
 #endif

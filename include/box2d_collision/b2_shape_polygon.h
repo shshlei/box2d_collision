@@ -19,6 +19,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
+
 #ifndef B2_POLYGON_SHAPE_H
 #define B2_POLYGON_SHAPE_H
 
@@ -26,52 +27,49 @@
 
 /// A solid convex polygon. It is assumed that the interior of the polygon is to
 /// the left of each edge.
-/// Polygons have a maximum number of vertices equal to b2_maxPolygonVertices.
+/// Polygons have a maximum number of vertices equal to 8.
 /// In most cases you should not need many vertices for a convex polygon.
 class B2_API b2PolygonShape : public b2Shape
 {
 public:
-    b2PolygonShape();
+  b2PolygonShape();
 
-    /// Create a convex hull from the given array of local points.
-    /// The count must be in the range [3, b2_maxPolygonVertices].
-    /// @warning the points may be re-ordered, even if they form a convex polygon
-    /// @warning collinear points are handled but not removed. Collinear points
-    /// may lead to poor stacking behavior.
-    void Set(const b2Vec2* points, int count);
+  /// Create a convex hull from the given array of local points.
+  /// The count must be in the range [3, 8].
+  /// @warning the points may be re-ordered, even if they form a convex polygon
+  /// @warning collinear points are handled but not removed. Collinear points
+  /// may lead to poor stacking behavior.
+  void Set(const b2Vec2 * points, int count);
 
-    /// Implement b2Shape.
-    b2Shape* Clone(b2BlockAllocator* allocator) const override;
+  b2Scalar ComputeArea() const;
 
-    /// @see b2Shape::TestPoint
-    bool TestPoint(const b2Transform& transform, const b2Vec2& p) const override;
+  int GetVerticesCount() const;
 
-    /// @see b2Shape::ComputeAABB
-    void ComputeAABB(b2AABB* aabb, const b2Transform& transform) const override;
+  const b2Vec2 * GetVertices() const;
 
-    bool InscribedSphereAtPoint(const b2Vec2& inp, const b2Vec2& bdp, const b2Vec2& normal, b2Vec2& local_center, b2Scalar &radius) const override; // todo m_radius
+  const b2Vec2 * GetNormals() const;
 
-    b2Vec2 SupportPoint(const b2Vec2& dir) const override; // todo m_radius
+  const b2Vec2 & GetVertice(int index) const;
 
-    b2Scalar ComputeArea() const;
+  const b2Vec2 & GetNormal(int index) const;
 
-    /// Validate convexity. This is a very time consuming operation.
-    /// @returns true if valid
-    bool Validate() const;
+  /// Implement b2Shape.
+  b2Shape * Clone(b2BlockAllocator * allocator) const override;
 
-    b2Vec2 m_centroid;
-    b2Vec2 m_vertices[b2_maxPolygonVertices];
-    b2Vec2 m_normals[b2_maxPolygonVertices];
-    int m_count;
+  /// @see b2Shape::TestPoint
+  bool TestPoint(const b2Transform & transform, const b2Vec2 & p) const override;
 
-    b2Scalar m_radius{0.0};
+  /// @see b2Shape::ComputeAABB
+  void ComputeAABB(b2AABB * aabb, const b2Transform & transform) const override;
+
+  bool InscribedSphereAtPoint(const b2Vec2 & inp, const b2Vec2 & bdp, const b2Vec2 & normal, b2Vec2 & local_center, b2Scalar & radius) const override;
+
+  b2Vec2 SupportPoint(const b2Vec2 & dir) const override;
+
+private:
+  b2Vec2 m_vertices[8];
+  b2Vec2 m_normals[8];
+  int m_count;
 };
-
-B2_FORCE_INLINE b2PolygonShape::b2PolygonShape()
-{
-    m_type = e_polygon;
-    m_count = 0;
-    m_centroid.SetZero();
-}
 
 #endif

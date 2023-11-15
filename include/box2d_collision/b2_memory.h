@@ -20,30 +20,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-/* Author: Shi Shenglei */
+#ifndef B2_MEMORY_H
+#define B2_MEMORY_H
 
-#include "box2d_collision/b2_bvh_manager.h"
-#include <stdio.h>
+#include "b2_api.h"
 
-int main()
+#include <stdint.h>
+
+#include <cstdlib>
+
+#define B2_NOT_USED(x) ((void)(x))
+
+// Memory Allocation
+
+/// Default allocation functions
+B2_API inline void * b2Alloc_Default(int size)
 {
-    b2BVHManager manager;
-
-    // Define the ground box shape.
-    b2PolygonShape groundBox;
-    groundBox.SetAsBox(50.0, 10.0);
-    manager.AddBody("box1", &groundBox, false);
-
-    // Define another box shape for our dynamic body.
-    b2PolygonShape dynamicBox;
-    dynamicBox.SetAsBox(1.0, 1.0);
-    manager.AddBody("box2", &dynamicBox, true);
-
-    b2Transform boxxf(b2Vec2(0.0, -11.1), 0.0);
-    manager.SetBodyTransform("box1", boxxf);
-
-    bool collision = manager.ContactTest();
-    printf("Collision: %d\n", collision);
-
-    return 0;
+  return malloc(size);
 }
+
+B2_API inline void b2Free_Default(void * mem)
+{
+  free(mem);
+}
+
+/// Implement this function to use your own memory allocator.
+inline void * b2Alloc(int size)
+{
+  return b2Alloc_Default(size);
+}
+
+/// If you implement b2Alloc, you should also implement this function.
+inline void b2Free(void * mem)
+{
+  b2Free_Default(mem);
+}
+
+#endif

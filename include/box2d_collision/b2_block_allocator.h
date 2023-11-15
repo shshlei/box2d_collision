@@ -20,10 +20,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef B2_BLOCK_ALLOCATOR_H
-#define B2_BLOCK_ALLOCATOR_H
+#ifndef B2_ALLOCATOR_BLOCK_H
+#define B2_ALLOCATOR_BLOCK_H
 
-#include "b2_common.h"
+#include "b2_api.h"
 
 const int b2_blockSizeCount = 14;
 
@@ -36,24 +36,23 @@ struct b2Chunk;
 class B2_API b2BlockAllocator
 {
 public:
-    b2BlockAllocator();
-    ~b2BlockAllocator();
+  b2BlockAllocator();
+  ~b2BlockAllocator();
 
-    /// Allocate memory. This will use b2Alloc if the size is larger than b2_maxBlockSize.
-    void* Allocate(int size);
+  /// Allocate memory. This will use b2Alloc if the size is larger than b2_maxBlockSize.
+  void * Allocate(int size);
 
-    /// Free memory. This will use b2Free if the size is larger than b2_maxBlockSize.
-    void Free(void* p, int size);
+  /// Free memory. This will use b2Free if the size is larger than b2_maxBlockSize.
+  void Free(void * p, int size);
 
-    void Clear();
+  void Clear();
 
 private:
+  b2Chunk * m_chunks;
+  int m_chunkCount;
+  int m_chunkSpace;
 
-    b2Chunk* m_chunks;
-    int m_chunkCount;
-    int m_chunkSpace;
-
-    b2Block* m_freeLists[b2_blockSizeCount];
+  b2Block * m_freeLists[b2_blockSizeCount];
 };
 
 #endif

@@ -22,7 +22,6 @@
 
 #include "box2d_collision/b2_bvh_manager.h"
 #include "box2d_collision/b2_distance.h"
-#include <stdio.h>
 #include <iostream>
 
 int main()
@@ -37,10 +36,11 @@ int main()
     b2RectangleShape dynamicBox(1.0, 1.0);
     manager.AddBody("box2", &dynamicBox);
 
-    b2Transform boxxf(b2Vec2(0.0, -10.0), 0.0);
+    b2Transform boxxf = b2Transform::Identity();
+    boxxf.translation() = b2Vec2(0.0, -10.0);
     manager.SetBodyTransform("box2", boxxf);
 
-    bool collision = manager.ContactTest();
+    bool collision = manager.Collide();
     printf("Collision: %d\n", collision);
 
     b2CircleShape circle1(b2Scalar(1.0));
@@ -50,17 +50,32 @@ int main()
     b2Scalar d;
     b2Vec2 p1, p2; 
     b2ShapeDistance dist;
-    dist.SignedDistance(&circle1, b2Transform(), &circle2, b2Transform(0.0, 1.0, 0.0), &d, &p1, &p2);
-    std::cout << "d = " << d << " p1 = (" << p1.x << ", " << p1.y << ") p2 = (" << p2.x << ", " << p2.y << ")" << std::endl;
+    boxxf.translation() = b2Vec2(0.0, 1.0);
+    dist.SignedDistance(&circle1, b2Transform::Identity(), &circle2, boxxf, &d, &p1, &p2);
+    std::cout << "d = " << d << " p1 = (" << p1.x() << ", " << p1.y() << ") p2 = (" << p2.x() << ", " << p2.y() << ")" << std::endl;
 
-    dist.SignedDistance(&circle1, b2Transform(), &circle2, b2Transform(0.0, -1.0, 0.0), &d, &p1, &p2);
-    std::cout << "d = " << d << " p1 = (" << p1.x << ", " << p1.y << ") p2 = (" << p2.x << ", " << p2.y << ")" << std::endl;
+    boxxf.translation() = b2Vec2(0.0, -1.0);
+    dist.SignedDistance(&circle1, b2Transform::Identity(), &circle2, boxxf, &d, &p1, &p2);
+    std::cout << "d = " << d << " p1 = (" << p1.x() << ", " << p1.y() << ") p2 = (" << p2.x() << ", " << p2.y() << ")" << std::endl;
 
-    dist.SignedDistance(&circle1, b2Transform(), &circle2, b2Transform(1.0, 0.0, 0.0), &d, &p1, &p2);
-    std::cout << "d = " << d << " p1 = (" << p1.x << ", " << p1.y << ") p2 = (" << p2.x << ", " << p2.y << ")" << std::endl;
+    boxxf.translation() = b2Vec2(1.0, 0.0);
+    dist.SignedDistance(&circle1, b2Transform::Identity(), &circle2, boxxf, &d, &p1, &p2);
+    std::cout << "d = " << d << " p1 = (" << p1.x() << ", " << p1.y() << ") p2 = (" << p2.x() << ", " << p2.y() << ")" << std::endl;
 
-    dist.SignedDistance(&circle1, b2Transform(), &circle2, b2Transform(-1.0, 0.0, 0.0), &d, &p1, &p2);
-    std::cout << "d = " << d << " p1 = (" << p1.x << ", " << p1.y << ") p2 = (" << p2.x << ", " << p2.y << ")" << std::endl;
+    boxxf.translation() = b2Vec2(-1.0, 0.0);
+    dist.SignedDistance(&circle1, b2Transform::Identity(), &circle2, boxxf, &d, &p1, &p2);
+    std::cout << "d = " << d << " p1 = (" << p1.x() << ", " << p1.y() << ") p2 = (" << p2.x() << ", " << p2.y() << ")" << std::endl;
+
+    std::cout << "Bisection Distance Test!" << std::endl;
+    b2EllipseShape ellipse1(b2Scalar(2.0), b2Scalar(1.0));
+    b2EllipseShape ellipse2(b2Scalar(1.0), b2Scalar(2.0));
+    boxxf.translation() = b2Vec2(5.0, 5.0);
+    boxxf.linear() = b2Rot(30.0 * B2_DEGS_PER_RAD).toRotationMatrix();
+    dist.Distance(&ellipse1, b2Transform::Identity(), &ellipse2, boxxf, &d, &p1, &p2);
+    std::cout << "d = " << d << " p1 = (" << p1.x() << ", " << p1.y() << ") p2 = (" << p2.x() << ", " << p2.y() << ")" << std::endl;
+
+    dist.BisectionDistance(&ellipse1, b2Transform::Identity(), &ellipse2, boxxf, &d, &p1, &p2);
+    std::cout << "d = " << d << " p1 = (" << p1.x() << ", " << p1.y() << ") p2 = (" << p2.x() << ", " << p2.y() << ")" << std::endl;
 
     return 0;
 }

@@ -29,55 +29,30 @@
 class B2_API b2EllipseShape : public b2Shape
 {
 public:
-    b2EllipseShape();
+  b2EllipseShape();
 
-    b2EllipseShape(b2Scalar a, b2Scalar b);
+  b2EllipseShape(b2Scalar a, b2Scalar b);
 
-    void SetHalfSides(b2Scalar a, b2Scalar b);
+  void SetHalfSides(b2Scalar a, b2Scalar b);
 
-    const b2Vec2 GetHalfSides() const;
+  const b2Vec2 GetHalfSides() const;
 
-    /// Implement b2Shape.
-    b2Shape* Clone(b2BlockAllocator* allocator) const override;
+  /// Implement b2Shape.
+  b2Shape * Clone(b2BlockAllocator * allocator) const override;
 
-    /// Implement b2Shape.
-    bool TestPoint(const b2Transform& transform, const b2Vec2& p) const override;
+  /// Implement b2Shape.
+  bool TestPoint(const b2Transform & transform, const b2Vec2 & p) const override;
 
-    /// @see b2Shape::ComputeAABB
-    void ComputeAABB(b2AABB* aabb, const b2Transform& transform) const override;
+  /// @see b2Shape::ComputeAABB
+  void ComputeAABB(b2AABB * aabb, const b2Transform & transform) const override;
 
-    bool InscribedSphereAtPoint(const b2Vec2& inp, const b2Vec2& bdp, const b2Vec2& normal, b2Vec2& local_center, b2Scalar &radius) const override;
+  bool InscribedSphereAtPoint(const b2Vec2 & inp, const b2Vec2 & bdp, const b2Vec2 & normal, b2Vec2 & local_center, b2Scalar & radius) const override;
 
-    b2Vec2 SupportPoint(const b2Vec2& dir) const override;
+  b2Vec2 SupportPoint(const b2Vec2 & dir) const override;
 
 private:
-    b2Scalar m_a, m_b;
-    b2Scalar m_a2, m_b2;
+  b2Scalar m_a, m_b;
+  b2Scalar m_a2, m_b2;
 };
-
-B2_FORCE_INLINE b2EllipseShape::b2EllipseShape()
-{
-    m_type = e_ellipse;
-    m_a = m_b = b2Scalar(0.0);
-    m_a2 = m_b2 = b2Scalar(0.0);
-}
-
-B2_FORCE_INLINE b2EllipseShape::b2EllipseShape(b2Scalar a, b2Scalar b)
-{
-    m_type = e_ellipse;
-    m_a = a; m_b = b;
-    m_a2 = a * a; m_b2 = b * b;
-}
-
-B2_FORCE_INLINE void b2EllipseShape::SetHalfSides(b2Scalar a, b2Scalar b)
-{
-    m_a = a; m_b = b;
-    m_a2 = a * a; m_b2 = b * b;
-}
-
-B2_FORCE_INLINE const b2Vec2 b2EllipseShape::GetHalfSides() const
-{
-    return b2Vec2(m_a, m_b);
-}
 
 #endif

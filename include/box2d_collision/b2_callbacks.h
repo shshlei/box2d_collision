@@ -24,12 +24,10 @@
 #define B2_CALLBACKS_H
 
 #include "b2_api.h"
+#include "b2_math.h"
 
-struct b2Vec2;
-struct b2Transform;
 class b2Fixture;
 class b2Body;
-class b2Contact;
 struct b2Manifold;
 
 /// Implement this class to provide collision filtering. In other words, you can implement
@@ -37,11 +35,11 @@ struct b2Manifold;
 class B2_API b2ContactFilter
 {
 public:
-    virtual ~b2ContactFilter() {}
+  virtual ~b2ContactFilter() {}
 
-    /// Return true if contact calculations should be performed between these two shapes.
-    /// @warning for performance reasons this is only called when the AABBs begin to overlap.
-    virtual bool ShouldCollide(b2Fixture* fixtureA, b2Fixture* fixtureB);
+  /// Return true if contact calculations should be performed between these two shapes.
+  /// @warning for performance reasons this is only called when the AABBs begin to overlap.
+  virtual bool ShouldCollide(b2Fixture * fixtureA, b2Fixture * fixtureB);
 };
 
 /// Callback class for AABB queries.
@@ -49,32 +47,32 @@ public:
 class B2_API b2NaiveCallback
 {
 public:
-    virtual ~b2NaiveCallback() {}
+  virtual ~b2NaiveCallback() {}
 
-    /// Called for each fixture found in the query AABB.
-    /// @return collision.
-    virtual bool ReportCollision(b2Fixture* fixture)
-    {
-        return true;
-    }
+  /// Called for each fixture found in the query AABB.
+  /// @return collision.
+  virtual bool ReportCollision(b2Fixture * fixture)
+  {
+    return true;
+  }
 
-    /// Collision between two fixtures 
-    virtual bool ReportCollision(b2Fixture* fixtureA, b2Fixture* fixtureB)
-    {
-        return true;
-    }
+  /// Collision between two fixtures
+  virtual bool ReportCollision(b2Fixture * fixtureA, b2Fixture * fixtureB)
+  {
+    return true;
+  }
 
-    /// @return separation.
-    virtual bool ReportDistance(b2Fixture* fixture, b2Scalar &dist)
-    {
-        return true;
-    }
+  /// @return separation.
+  virtual bool ReportDistance(b2Fixture * fixture, b2Scalar & dist)
+  {
+    return true;
+  }
 
-    /// Distance between two fixtures 
-    virtual bool ReportDistance(b2Fixture* fixtureA, b2Fixture* fixtureB, b2Scalar &dist)
-    {
-        return true;
-    }
+  /// Distance between two fixtures
+  virtual bool ReportDistance(b2Fixture * fixtureA, b2Fixture * fixtureB, b2Scalar & dist)
+  {
+    return true;
+  }
 };
 
 #endif

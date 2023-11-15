@@ -21,42 +21,67 @@
 // SOFTWARE.
 
 #include "box2d_collision/b2_shape_rectangle.h"
+
 #include "box2d_collision/b2_block_allocator.h"
+#include "box2d_collision/b2_math.h"
 
 #include <new>
 
-b2Shape* b2RectangleShape::Clone(b2BlockAllocator* allocator) const
+b2RectangleShape::b2RectangleShape()
 {
-    void* mem = allocator->Allocate(sizeof(b2RectangleShape));
-    b2RectangleShape* clone = new (mem) b2RectangleShape;
-    *clone = *this;
-    return clone;
+  m_type = e_rectangle;
 }
 
-bool b2RectangleShape::TestPoint(const b2Transform& transform, const b2Vec2& p) const
+b2RectangleShape::b2RectangleShape(b2Scalar hx, b2Scalar hy)
 {
-    b2Vec2 pLocal = b2MulT(transform.q, p - transform.p);
-    return b2Abs(pLocal.x) <= m_hsides(0) && b2Abs(pLocal.y) <= m_hsides(1);
+  m_type = e_rectangle;
+  m_hsides.x() = hx;
+  m_hsides.y() = hy;
 }
 
-void b2RectangleShape::ComputeAABB(b2AABB* aabb, const b2Transform& transform) const
+void b2RectangleShape::Set(b2Scalar hx, b2Scalar hy)
 {
-    b2Scalar c = b2Abs(transform.q.c), s = b2Abs(transform.q.s);
-    b2Scalar x = c * m_hsides(0) + s * m_hsides(1); 
-    b2Scalar y = s * m_hsides(0) + c * m_hsides(1);
-    b2Vec2 r(x, y);
-    aabb->lowerBound = transform.p - r;
-    aabb->upperBound = transform.p + r;
+  m_hsides.x() = hx;
+  m_hsides.y() = hy;
 }
 
-bool b2RectangleShape::InscribedSphereAtPoint(const b2Vec2& /*inp*/, const b2Vec2& /*bdp*/, const b2Vec2& /*normal*/, b2Vec2& local_center, b2Scalar &radius) const
+const b2Vec2 & b2RectangleShape::GetHalfSides() const
 {
-    return false;
+  return m_hsides;
 }
 
-b2Vec2 b2RectangleShape::SupportPoint(const b2Vec2& dir) const
+b2Shape * b2RectangleShape::Clone(b2BlockAllocator * allocator) const
 {
-    b2Scalar x = dir.x >= b2Scalar(0.0) ? m_hsides(0) : -m_hsides(0);
-    b2Scalar y = dir.y >= b2Scalar(0.0) ? m_hsides(1) : -m_hsides(1);
-    return b2Vec2(x, y);
+  void * mem = allocator->Allocate(sizeof(b2RectangleShape));
+  b2RectangleShape * clone = new (mem) b2RectangleShape;
+  *clone = *this;
+  return clone;
+}
+
+bool b2RectangleShape::TestPoint(const b2Transform & transform, const b2Vec2 & p) const
+{
+  b2Vec2 pLocal = b2MulT(transform, p);
+  return b2Abs(pLocal.x()) <= m_hsides(0) && b2Abs(pLocal.y()) <= m_hsides(1);
+}
+
+void b2RectangleShape::ComputeAABB(b2AABB * aabb, const b2Transform & transform) const
+{
+  b2Scalar c = b2Abs(transform(0, 0)), s = b2Abs(transform(0, 1));
+  b2Scalar x = c * m_hsides(0) + s * m_hsides(1);
+  b2Scalar y = s * m_hsides(0) + c * m_hsides(1);
+  b2Vec2 r(x, y);
+  aabb->min() = transform.translation() - r;
+  aabb->max() = transform.translation() + r;
+}
+
+bool b2RectangleShape::InscribedSphereAtPoint(const b2Vec2 & /*inp*/, const b2Vec2 & /*bdp*/, const b2Vec2 & /*normal*/, b2Vec2 & local_center, b2Scalar & radius) const
+{
+  return false;
+}
+
+b2Vec2 b2RectangleShape::SupportPoint(const b2Vec2 & dir) const
+{
+  b2Scalar x = dir.x() >= b2Scalar(0.0) ? m_hsides(0) : -m_hsides(0);
+  b2Scalar y = dir.y() >= b2Scalar(0.0) ? m_hsides(1) : -m_hsides(1);
+  return b2Vec2(x, y);
 }
