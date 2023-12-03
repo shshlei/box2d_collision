@@ -138,7 +138,7 @@ bool doSimplex(b2Simplex & simplex, b2Vec2 & dir)
   return doSimplex3(simplex, dir);
 }
 
-b2Scalar originSegmentClosestPoint(const b2Vec2 & w1, const b2Vec2 & w2, b2Vec2 & closest_p)
+b2Scalar originSegmentClosestPoint(const b2Vec2 & w1, const b2Vec2 & w2, b2Vec2 & closest_p, b2Scalar * s = nullptr)
 {
   b2Vec2 e12 = w2 - w1;
 
@@ -146,6 +146,7 @@ b2Scalar originSegmentClosestPoint(const b2Vec2 & w1, const b2Vec2 & w2, b2Vec2 
   b2Scalar d12_2 = -b2Dot(w1, e12);
   if (d12_2 <= b2Scalar(0.0)) {
     closest_p = w1;
+    if (s) *s = b2Scalar(0.0);
     return closest_p.norm();
   }
 
@@ -153,6 +154,7 @@ b2Scalar originSegmentClosestPoint(const b2Vec2 & w1, const b2Vec2 & w2, b2Vec2 
   b2Scalar d12_1 = b2Dot(w2, e12);
   if (d12_1 <= b2Scalar(0.0)) {
     closest_p = w2;
+    if (s) *s = b2Scalar(1.0);
     return closest_p.norm();
   }
 
@@ -160,6 +162,7 @@ b2Scalar originSegmentClosestPoint(const b2Vec2 & w1, const b2Vec2 & w2, b2Vec2 
   b2Scalar inv_d12 = b2Scalar(1.0) / (d12_1 + d12_2);
   b2Scalar alpha = d12_2 * inv_d12;
   closest_p = (b2Scalar(1.0) - alpha) * w1 + alpha * w2;
+  if (s) *s = alpha;
   return closest_p.norm();
 }
 
@@ -188,7 +191,7 @@ b2Scalar originSegmentClosestPoint(const b2Vec2 & w1, const b2Vec2 & w2, b2Scala
   return closest_p.norm();
 }
 
-b2Scalar simplexReduceToSegment(b2Simplex & simplex, b2Scalar & dist, b2Vec2 & best_witness)
+b2Scalar simplexReduceToSegment(b2Simplex & simplex, b2Scalar & dist, b2Vec2 & best_witness, b2Scalar * s = nullptr)
 {
   b2Scalar newdist;
   b2Vec2 witness;
@@ -196,12 +199,14 @@ b2Scalar simplexReduceToSegment(b2Simplex & simplex, b2Scalar & dist, b2Vec2 & b
 
   // try the third point in all two positions
   for (int i = 0; i < 2; i++) {
-    newdist = originSegmentClosestPoint(simplex.At(i == 0 ? 2 : 0).v, simplex.At(i == 1 ? 2 : 1).v, witness);
+    b2Scalar se;
+    newdist = originSegmentClosestPoint(simplex.At(i == 0 ? 2 : 0).v, simplex.At(i == 1 ? 2 : 1).v, witness, &se);
     // record the best triangle
     if (newdist < dist) {
       best = i;
       dist = newdist;
       best_witness = witness;
+      if (s) *s = se;
     }
   }
   if (best >= 0)
@@ -354,151 +359,44 @@ b2Scalar ccdDistance(const b2MinkowskiDiff & shape, b2Simplex & simplex, int max
   return last_dist;
 }
 
-// A negative return value means separation
-b2Scalar bisectionDistance(const b2MinkowskiDiff & shape, b2Vec2 & dir, int max_iterations, b2Scalar tol, b2Vec2 & p1, b2Vec2 & p2)
-/*
-{ // angle bisection
-    b2Simplex simplex;
-    if (!ccdSeparation(shape, simplex, max_iterations, tol))
-        return b2Scalar(1.0);
-
-    b2Scalar last_dist = B2_INFINITY;
-    b2Vec2 closest_p; // The point on the simplex that is closest to the
-    simplexClosestP(simplex, closest_p, last_dist);
-
-    b2Vec2 dir = (-closest_p).normalized(), last = shape.Support(dir); // last support point
-    last_dist = b2Dot(dir, last);
-
-    b2Scalar normal, tnormal; // steepest rotation direction
-    if (bisectionOptimal(dir, last, -last_dist * tol, normal))
-    {
-        //extractClosestPoints(simplex, p1, p2, closest_p);
-        return last_dist;
-    }
-
-    b2Vec2 pdir = dir, best_support = last;
-    b2Scalar dist = 0.0;
-    int iterations = 0;
-    for (; iterations < max_iterations; ++iterations) // find the bisection bounds
-    {
-        b2Scalar llen = last.norm();
-        dir = (-last) / llen;
-        last = shape.Support(dir);
-        dist = b2Dot(dir, last);
-        if (dist + llen < tol) // todo
-        {
-            return b2Min(dist, last_dist);
-        }
-        if (dist >= last_dist)
-            break;
-        tnormal = b2Cross(last, dir);
-        b2Scalar dot = tnormal * normal;
-        if (dot < -tol)
-        {
-            //if (last_dist - dist < 10.0 * tol)
-            break;
-        }
-        else if (dot <= tol)
-        {
-            return dist;
-        }
-        pdir = dir;
-        last_dist = dist;
-        best_support = last;
-        normal = tnormal / b2Abs(tnormal);
-    }
-
-    bool last_best = true;
-    if (dist < last_dist)
-    {
-        last_best = false;
-        last_dist = dist;
-        best_support = last;
-    }
-    b2Scalar angle = b2Acos(b2Dot(pdir, dir));
-    for (; iterations < max_iterations; ++iterations) // bisection core
-    {
-        angle *= 0.5;
-        b2Vec2 tdir = 0.5 * (pdir + dir);
-        tdir.normalize();
-        if (b2Dot(tdir, best_support) > last_dist)
-        {
-            if (last_best)
-                dir = tdir;
-            else
-                pdir = tdir;
-            continue;
-        }
-        last = shape.Support(tdir);
-        dist = b2Dot(tdir, last);
-        if (dist > last_dist)
-        {
-            if (last_best)
-                dir = tdir;
-            else
-                pdir = tdir;
-            continue;
-        }
-        if (last_dist - dist < tol)
-        {
-            return dist;
-        }
-        last_dist = dist;
-        if (last.isApprox(best_support, tol))
-            return last_dist;
-        tnormal = b2Cross(last, tdir);
-        b2Scalar dot = tnormal * normal;
-        if (dot > tol)
-        {
-            pdir = tdir;
-            last_best = true;
-        }
-        else if (dot < -tol)
-        {
-            dir = tdir;
-            last_best = false;
-        }
-        else
-        {
-            return last_dist;
-        }
-        if (angle < tol)
-        {
-            return last_dist;
-        }
-        best_support = last;
-    }
-    return last_dist;
-}
-*/
+b2Scalar bisectionDistance2(const b2MinkowskiDiff & shape, b2Simplex & simplex, int max_iterations, b2Scalar tol, b2Vec2 & p1, b2Vec2 & p2)
 {
-  b2Vec2 last = shape.Support(dir);  // last support point
-  b2Scalar last_dist = b2Dot(dir, last);
+  b2Scalar dist, normal;
+  b2Vec2 dir, last, current;
+  bool first = true;
+  bool bisection = false;
 
-  b2Scalar normal;  // steepest rotation direction
-  if (bisectionOptimal(dir, last, last.norm() * tol, normal)) {
-    // extractClosestPoints(simplex, p1, p2, closest_p);
-    return last_dist;
-  }
-
-  b2Vec2 current;
-  b2Scalar dist = 0.0;
   int iterations = 0;
-  for (; iterations < max_iterations; ++iterations) // find the bisection bounds
-  {
-    dir = (-last).normalized();
-    current = shape.Support(dir);
-    dist = b2Dot(dir, current);
-    if (dist >= last_dist) break;
-    b2Scalar tnormal;
-    if (bisectionOptimal(dir, current, current.norm() * tol, tnormal)) {
-      return dist;
+  b2Scalar last_dist = B2_INFINITY;
+  for (; iterations < max_iterations; ++iterations) {
+    b2Vec2 closest_p;  // The point on the simplex that is closest to the
+    simplexClosestP(simplex, closest_p, last_dist);
+    b2Support s;  // last support point
+    support(shape, closest_p, dir, s);
+    if (ccdOptimal(closest_p, dir, s.v, tol)) {
+      extractClosestPoints(simplex, p1, p2, closest_p);
+      return -last_dist;
     }
-    b2Scalar dot = tnormal * normal;
-    if (dot < b2Scalar(0.0)) break;
-    last = current;
-    last_dist = dist;
-    normal = tnormal;
+    simplex.Add(s);
+
+    b2Scalar tnormal = b2Cross(s.v, dir);
+    if (first) normal = tnormal;
+    else if (normal * tnormal < b2Scalar(0.0)) {
+      last = s.v;
+      last_dist = dir.dot(last);
+      normal = tnormal / b2Abs(tnormal);
+      bisection = true;
+      break;
+    }
+    current = s.v;
+    dist = dir.dot(current);
+  }
+  if (!bisection)
+  {
+    b2Vec2 closest_p;  // The point on the simplex that is closest to the
+    simplexClosestP(simplex, closest_p, last_dist);
+    extractClosestPoints(simplex, p1, p2, closest_p);
+    return -last_dist;
   }
 
   bool last_best = true;
@@ -546,6 +444,78 @@ b2Scalar bisectionDistance(const b2MinkowskiDiff & shape, b2Vec2 & dir, int max_
     }
   }
   return last_dist;
+}
+
+// A negative return value means separation
+b2Scalar bisectionDistanceCore(const b2MinkowskiDiff & shape, int max_iterations, b2Scalar tol, b2Scalar & dist_best, bool last_best, b2Vec2 & last, b2Vec2 & current, b2Scalar normal, b2Vec2 & p1, b2Vec2 & p2)
+{
+  bool signbit = std::signbit(normal);
+  for (int iterations = 0; iterations < max_iterations; ++iterations) // bisection core
+  {
+    b2Vec2 dir = b2Cross(b2Scalar(1.0), last - current).normalized();
+    if (signbit) dir = -dir;
+    b2Vec2 temp = shape.Support(dir);
+    b2Scalar dist = b2Dot(dir, temp);
+    if (dist - b2Dot(dir, last) < tol)
+    {
+      return dist_best;
+    }
+    if (dist > dist_best)
+    {
+      if (last_best)
+        current = temp;
+      else
+        last = temp;
+      continue;
+    }
+    dist_best = dist;
+    b2Scalar tnormal = b2Cross(temp, dir);
+    if (std::signbit(tnormal) == signbit)
+    {
+      last = temp;
+      last_best = true;
+    }
+    else
+    {
+      current = temp;
+      last_best = false;
+    }
+  }
+  return dist_best;
+}
+
+b2Scalar bisectionDistance(const b2MinkowskiDiff & shape, b2Vec2 & dir, int max_iterations, b2Scalar tol, b2Vec2 & p1, b2Vec2 & p2)
+{
+  b2Vec2 last = shape.Support(dir);  // last support point
+  b2Scalar dist_best = b2Dot(dir, last);
+
+  b2Scalar normal;  // steepest rotation direction
+  if (bisectionOptimal(dir, last, last.norm() * tol, normal)) {
+    // extractClosestPoints(simplex, p1, p2, closest_p);
+    return dist_best;
+  }
+  bool signbit = std::signbit(normal);
+
+  b2Vec2 current;
+  bool last_best = true;
+  for (int iterations = 0; iterations < max_iterations; ++iterations) // find the bisection bounds
+  {
+    dir = (-last).normalized();
+    current = shape.Support(dir);
+    b2Scalar dist = b2Dot(dir, current);
+    if (dist > dist_best) break;
+    dist_best = dist;
+    b2Scalar tnormal;
+    if (bisectionOptimal(dir, current, current.norm() * tol, tnormal)) {
+      return dist_best;
+    }
+    if (std::signbit(tnormal) != signbit) {
+      last_best = false;
+      break;
+    }
+    last = current;
+  }
+  return bisectionDistanceCore(shape, max_iterations, tol, dist_best, last_best, last, current, normal, p1, p2);
 }
 
 bool simplexToPolytope2(const b2MinkowskiDiff & shape, b2Simplex & simplex, b2Polytope & polytope)
@@ -732,6 +702,54 @@ bool b2ShapeDistance::SignedDistance(const b2Shape * shape1, const b2Transform &
   return d > b2Scalar(0.0);
 }
 
+b2Scalar b2ShapeDistance::BisectionDistanceCore(const b2MinkowskiDiff & shape, b2Simplex & simplex, b2Vec2 & p1, b2Vec2 & p2) const
+{
+  b2Vec2 closest_p;  // The point on the simplex that is closest to the origin
+  int sz = simplex.Size();
+  b2Scalar s = 0.0;
+  if (sz == 3) {
+    sz = 2;
+    b2Scalar distp = B2_INFINITY;
+    simplexReduceToSegment(simplex, distp, closest_p, &s);
+  }
+  else if (sz == 2) {
+    originSegmentClosestPoint(simplex.At(0).v, simplex.At(1).v, closest_p, &s);
+  }
+
+  b2Scalar d;
+  if (sz == 2 && (s != b2Scalar(0.0) && s != b2Scalar(1.0))) {
+    // bisection bounds
+    b2Vec2 dir1 = (-simplex.At(0).v).normalized();
+    b2Vec2 dir2 = (-simplex.At(1).v).normalized();
+    b2Vec2 last1 = shape.Support(dir1);
+    b2Scalar normal1 = b2Cross(last1, dir1);
+    b2Vec2 last2 = shape.Support(dir2);
+    b2Scalar normal2 = b2Cross(last2, dir2);
+    if (std::signbit(normal1) != std::signbit(normal2)) {
+      // found bisection bounds
+      b2Scalar dist1 = b2Dot(dir1, last1);
+      b2Scalar dist2 = b2Dot(dir2, last2);
+      if (dist1 < dist2) {
+        normal1 /= b2Abs(normal1);
+        d = -bisectionDistanceCore(shape, max_distance_iterations, distance_tolerance, dist1, true, last1, last2, normal1, p1, p2);
+      }
+      else {
+        normal2 /= b2Abs(normal2);
+        d = -bisectionDistanceCore(shape, max_distance_iterations, distance_tolerance, dist2, true, last2, last1, normal2, p1, p2);
+      }
+      return d;
+    }
+  }
+  if (sz == 1) {
+    closest_p = simplex.At(0).v;
+  }
+
+  // search direction
+  b2Vec2 dir = (-closest_p).normalized();
+  d = -bisectionDistance(shape, dir, max_distance_iterations, distance_tolerance, p1, p2);
+  return d;
+}
+
 bool b2ShapeDistance::BisectionDistance(const b2Shape * shape1, const b2Transform & xf1,
   const b2Shape * shape2, const b2Transform & xf2,
   b2Scalar * dist, b2Vec2 * p1, b2Vec2 * p2) const
@@ -748,13 +766,32 @@ bool b2ShapeDistance::BisectionDistance(const b2Shape * shape1, const b2Transfor
     return false;
   }
 
-  b2Scalar last_dist = B2_INFINITY;
-  b2Vec2 closest_p;  // The point on the simplex that is closest to the origin
-  simplexClosestP(simplex, closest_p, last_dist);
-  b2Vec2 dir = (-closest_p).normalized();
+  b2Vec2 p1_, p2_;
+  b2Scalar d = BisectionDistanceCore(shape, simplex, p1_, p2_);
+  if (dist) *dist = d;
+  if (p1) *p1 = b2Mul(xf1, p1_);
+  if (p2) *p2 = b2Mul(xf1, p2_);
+  return true;
+}
+
+bool b2ShapeDistance::BisectionDistance2(const b2Shape * shape1, const b2Transform & xf1,
+  const b2Shape * shape2, const b2Transform & xf2,
+  b2Scalar * dist, b2Vec2 * p1, b2Vec2 * p2) const
+{
+  b2MinkowskiDiff shape;
+  shape.shapes[0] = shape1;
+  shape.shapes[1] = shape2;
+  shape.toshape1 = xf2.linear().transpose() * xf1.linear();
+  shape.toshape0 = b2MulT(xf1, xf2);
+
+  b2Simplex simplex;
+  if (!ccdSeparation(shape, simplex, max_distance_iterations, distance_tolerance)) {
+    if (dist) *dist = b2Scalar(-1.0);
+    return false;
+  }
 
   b2Vec2 p1_, p2_;
-  b2Scalar d = -bisectionDistance(shape, dir, max_distance_iterations, distance_tolerance, p1_, p2_);
+  b2Scalar d = -bisectionDistance2(shape, simplex, max_distance_iterations, distance_tolerance, p1_, p2_);
   if (dist) *dist = d;
   if (d > b2Scalar(0.0)) {
     if (p1) *p1 = b2Mul(xf1, p1_);
@@ -774,28 +811,41 @@ bool b2ShapeDistance::SignedBisectionDistance(const b2Shape * shape1, const b2Tr
   shape.toshape1 = xf2.linear().transpose() * xf1.linear();
   shape.toshape0 = b2MulT(xf1, xf2);
 
-  b2Vec2 dir;
-  b2Simplex simplex;
-  if (ccdSeparation(shape, simplex, max_distance_iterations, distance_tolerance)) {
-    b2Scalar last_dist = B2_INFINITY;
-    b2Vec2 closest_p;
-    simplexClosestP(simplex, closest_p, last_dist);
-    dir = (-closest_p).normalized();
-  }
-  else {
-    dir = b2Vec2(1.0, 0.0);
-    // b2Vec2 last = shape.Support(dir);
-    // b2Scalar dist = b2Dot(dir, last);
-  }
-
+  b2Scalar d;
   b2Vec2 p1_, p2_;
-  b2Scalar d = -bisectionDistance(shape, dir, max_distance_iterations, distance_tolerance, p1_, p2_);
 
+  bool separation = true;
+  b2Simplex simplex;
+  if (separation = ccdSeparation(shape, simplex, max_distance_iterations, distance_tolerance)) {
+    d = BisectionDistanceCore(shape, simplex, p1_, p2_);
+    if (dist) *dist = d;
+    if (p1) *p1 = b2Mul(xf1, p1_);
+    if (p2) *p2 = b2Mul(xf1, p2_);
+    return true;
+  }
+
+  b2Polytope polytope;
+  if (!simplexToPolytope(shape, simplex, polytope)) {
+    if (dist) *dist = 0.0;
+    //extractClosestPoints(simplex, p1, p2, b2Vec2::Zero());
+    return false;
+  }
+
+  b2Vec2 dir_best;
+  b2Scalar dist_best = B2_INFINITY;
+  for (std::size_t i = 0, sz = polytope.ps.size(); i < sz; i++) {
+    std::size_t j = (i + 1) % sz;
+    b2Vec2 dir = b2Cross(polytope.ps[j].v - polytope.ps[i].v, b2Scalar(1.0)).normalized();
+    b2Vec2 last = shape.Support(dir);
+    b2Scalar dist = b2Dot(dir, last);
+    if (dist < dist_best) {
+      dir_best = dir;
+      dist_best = dist;
+    }
+  }
+  d = -bisectionDistance(shape, dir_best, max_distance_iterations, distance_tolerance, p1_, p2_);
   if (dist) *dist = d;
   if (p1) *p1 = b2Mul(xf1, p1_);
   if (p2) *p2 = b2Mul(xf1, p2_);
-  if (d > b2Scalar(0.0))
-    return true;
-  else
-    return false;
+  return separation;
 }

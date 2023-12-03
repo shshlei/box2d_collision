@@ -172,7 +172,13 @@ struct b2ShapeDistance
     const b2Shape * shape2, const b2Transform & xf2,
     b2Scalar * dist = nullptr, b2Vec2 * p1 = nullptr, b2Vec2 * p2 = nullptr) const;
 
+  b2Scalar BisectionDistanceCore(const b2MinkowskiDiff & shape, b2Simplex & simplex, b2Vec2 & p1, b2Vec2 & p2) const;
+
   bool BisectionDistance(const b2Shape * shape1, const b2Transform & xf1,
+    const b2Shape * shape2, const b2Transform & xf2,
+    b2Scalar * dist = nullptr, b2Vec2 * p1 = nullptr, b2Vec2 * p2 = nullptr) const;
+
+  bool BisectionDistance2(const b2Shape * shape1, const b2Transform & xf1,
     const b2Shape * shape2, const b2Transform & xf2,
     b2Scalar * dist = nullptr, b2Vec2 * p1 = nullptr, b2Vec2 * p2 = nullptr) const;
 
