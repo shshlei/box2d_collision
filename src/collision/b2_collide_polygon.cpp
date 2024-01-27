@@ -54,7 +54,7 @@ static b2Scalar b2FindMaxSeparation(int * edgeIndex, b2Vec2 * point,
       }
     }
 
-    if (maxSeparation <= b2Scalar(0.0) ? si > maxSeparation : si > b2Scalar(0.0) && si < maxSeparation) {
+    if ((maxSeparation <= b2Scalar(0.0) ? si > maxSeparation : si > b2Scalar(0.0)) && si < maxSeparation) {
       maxSeparation = si;
       bestIndex = i;
       *point = temp;
@@ -98,7 +98,7 @@ bool b2CollidePolygons(b2Manifold * manifold,
   b2Scalar separation = separationA;
   b2Vec2 c = b2Mul(xfB, pointB);
   bool flip = false;
-  if (separationB > b2Scalar(0.0) ? (separationA < b2Scalar(0.0) || separationB < separationA) : separationB > separationA) {
+  if ((separationB > b2Scalar(0.0) ? (separationA < b2Scalar(0.0) || separationB < separationA) : separationB > separationA)) {
     poly1 = polyB;
     xf1 = xfB;
     edge1 = edgeB;
@@ -121,7 +121,7 @@ bool b2CollidePolygons(b2Manifold * manifold,
     b2Vec2 cLocal = b2MulT(xf1, c);
     // Vertices that subtend the incident face.
     int vertIndex1 = edge1;
-    int vertIndex2 = vertIndex1 + 1 < poly1->GetVerticesCount() ? vertIndex1 + 1 : 0;
+    int vertIndex2 = (vertIndex1 + 1 < poly1->GetVerticesCount() ? vertIndex1 + 1 : 0);
     const b2Vec2 & v1 = poly1->GetVertice(vertIndex1);
     const b2Vec2 & v2 = poly1->GetVertice(vertIndex2);
     // Compute barycentric coordinates

@@ -434,6 +434,14 @@ bool b2BVHManager::Collide(b2NaiveCallback * callback, const b2AABB & aabb) cons
   return m_broadPhase->Collide(&wrapper, aabb);
 }
 
+bool b2BVHManager::Collide(b2NaiveCallback * callback, const b2OBB & aabb) const
+{
+  b2BVHManagerCallback wrapper;
+  wrapper.broadPhase = m_broadPhase;
+  wrapper.callback = callback;
+  return m_broadPhase->Collide(&wrapper, aabb);
+}
+
 bool b2BVHManager::Collide(b2NaiveCallback * callback, const b2Vec2 & point) const
 {
   b2BVHManagerCallback wrapper;

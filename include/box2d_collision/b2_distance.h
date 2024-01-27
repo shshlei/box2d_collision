@@ -161,6 +161,30 @@ struct b2ShapeDistance
   /// @brief default setting for GJK algorithm
   b2ShapeDistance() = default;
 
+  // The firs transform is identity
+  bool Separation(const b2Shape * shape1, const b2Shape * shape2, const b2Transform & xf2) const;
+
+  bool Distance(const b2Shape * shape1,
+    const b2Shape * shape2, const b2Transform & xf2,
+    b2Scalar * dist = nullptr, b2Vec2 * p1 = nullptr, b2Vec2 * p2 = nullptr) const;
+
+  bool SignedDistance(const b2Shape * shape1,
+    const b2Shape * shape2, const b2Transform & xf2,
+    b2Scalar * dist = nullptr, b2Vec2 * p1 = nullptr, b2Vec2 * p2 = nullptr) const;
+
+  bool BisectionDistance(const b2Shape * shape1,
+    const b2Shape * shape2, const b2Transform & xf2,
+    b2Scalar * dist = nullptr, b2Vec2 * p1 = nullptr, b2Vec2 * p2 = nullptr) const;
+
+  bool BisectionDistance2(const b2Shape * shape1,
+    const b2Shape * shape2, const b2Transform & xf2,
+    b2Scalar * dist = nullptr, b2Vec2 * p1 = nullptr, b2Vec2 * p2 = nullptr) const;
+
+  bool SignedBisectionDistance(const b2Shape * shape1,
+    const b2Shape * shape2, const b2Transform & xf2,
+    b2Scalar * dist = nullptr, b2Vec2 * p1 = nullptr, b2Vec2 * p2 = nullptr) const;
+
+  // with both transforms
   bool Separation(const b2Shape * shape1, const b2Transform & xf1,
     const b2Shape * shape2, const b2Transform & xf2) const;
 

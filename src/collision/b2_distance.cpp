@@ -112,11 +112,11 @@ bool doSimplex3(b2Simplex & simplex, b2Vec2 & dir)
   else
     dir2 = b2Cross(ac, b2Scalar(1.0)).normalized();
 
-  b2Scalar dot1 = b2Dot(dir1, a.v);
-  b2Scalar dot2 = b2Dot(dir2, a.v);
-  if (dot1 < b2Scalar(0.0) && dot2 < b2Scalar(0.0))
+  b2Scalar dot1 = b2Dot(dir1, c.v);
+  b2Scalar dot2 = b2Dot(dir2, b.v);
+  if (dot1 > b2Scalar(0.0) && dot2 > b2Scalar(0.0))
     return true;
-  else if (dot1 > b2Scalar(0.0)) {
+  else if (dot1 < b2Scalar(0.0)) {
     simplex.Set(0, b);
     simplex.Set(1, a);
     simplex.SetSize(2);
@@ -640,6 +640,218 @@ b2Scalar ccdPenetration(const b2MinkowskiDiff & shape, b2Simplex & simplex, int 
 }
 }  // namespace
 
+// The first transform is Identity
+bool b2ShapeDistance::Separation(const b2Shape * shape1,
+  const b2Shape * shape2, const b2Transform & xf2) const
+{
+  b2MinkowskiDiff shape;
+  shape.shapes[0] = shape1;
+  shape.shapes[1] = shape2;
+  shape.toshape1 = xf2.linear().transpose();
+  shape.toshape0 = xf2;
+  b2Simplex simplex;
+  return ccdSeparation(shape, simplex, max_distance_iterations, distance_tolerance);
+}
+
+bool b2ShapeDistance::Distance(const b2Shape * shape1,
+  const b2Shape * shape2, const b2Transform & xf2,
+  b2Scalar * dist, b2Vec2 * p1, b2Vec2 * p2) const
+{
+  b2MinkowskiDiff shape;
+  shape.shapes[0] = shape1;
+  shape.shapes[1] = shape2;
+  shape.toshape1 = xf2.linear().transpose();
+  shape.toshape0 = xf2;
+
+  b2Simplex simplex;
+  if (!ccdSeparation(shape, simplex, max_distance_iterations, distance_tolerance)) {
+    if (dist) *dist = b2Scalar(-1.0);
+    return false;
+  }
+
+  b2Vec2 p1_, p2_;
+  b2Scalar d = ccdDistance(shape, simplex, max_distance_iterations, distance_tolerance, p1_, p2_);
+  if (dist) *dist = d;
+  if (d > b2Scalar(0.0)) {
+    if (p1) *p1 = p1_;
+    if (p2) *p2 = p2_;
+    return true;
+  }
+  return false;
+}
+
+bool b2ShapeDistance::SignedDistance(const b2Shape * shape1,
+  const b2Shape * shape2, const b2Transform & xf2,
+  b2Scalar * dist, b2Vec2 * p1, b2Vec2 * p2) const
+{
+  b2MinkowskiDiff shape;
+  shape.shapes[0] = shape1;
+  shape.shapes[1] = shape2;
+  shape.toshape1 = xf2.linear().transpose();
+  shape.toshape0 = xf2;
+
+  b2Scalar d;
+  b2Vec2 p1_, p2_;
+  b2Simplex simplex;
+  if (ccdSeparation(shape, simplex, max_distance_iterations, distance_tolerance))
+    d = ccdDistance(shape, simplex, max_distance_iterations, distance_tolerance, p1_, p2_);
+  else
+    d = -ccdPenetration(shape, simplex, max_distance_iterations, distance_tolerance, p1_, p2_);
+  if (dist) *dist = d;
+  if (p1) *p1 = p1_;
+  if (p2) *p2 = p2_;
+  return d > b2Scalar(0.0);
+}
+
+b2Scalar b2ShapeDistance::BisectionDistanceCore(const b2MinkowskiDiff & shape, b2Simplex & simplex, b2Vec2 & p1, b2Vec2 & p2) const
+{
+  b2Vec2 closest_p;  // The point on the simplex that is closest to the origin
+  int sz = simplex.Size();
+  b2Scalar s = 0.0;
+  if (sz == 3) {
+    sz = 2;
+    b2Scalar distp = B2_INFINITY;
+    simplexReduceToSegment(simplex, distp, closest_p, &s);
+  }
+  else if (sz == 2) {
+    originSegmentClosestPoint(simplex.At(0).v, simplex.At(1).v, closest_p, &s);
+  }
+
+  b2Scalar d;
+  if (sz == 2 && (s != b2Scalar(0.0) && s != b2Scalar(1.0))) {
+    // bisection bounds
+    b2Vec2 dir1 = (-simplex.At(0).v).normalized();
+    b2Vec2 dir2 = (-simplex.At(1).v).normalized();
+    b2Vec2 last1 = shape.Support(dir1);
+    b2Scalar normal1 = b2Cross(last1, dir1);
+    b2Vec2 last2 = shape.Support(dir2);
+    b2Scalar normal2 = b2Cross(last2, dir2);
+    if (std::signbit(normal1) != std::signbit(normal2)) {
+      // found bisection bounds
+      b2Scalar dist1 = b2Dot(dir1, last1);
+      b2Scalar dist2 = b2Dot(dir2, last2);
+      if (dist1 < dist2) {
+        normal1 /= b2Abs(normal1);
+        d = -bisectionDistanceCore(shape, max_distance_iterations, distance_tolerance, dist1, true, last1, last2, normal1, p1, p2);
+      }
+      else {
+        normal2 /= b2Abs(normal2);
+        d = -bisectionDistanceCore(shape, max_distance_iterations, distance_tolerance, dist2, true, last2, last1, normal2, p1, p2);
+      }
+      return d;
+    }
+  }
+  if (sz == 1) {
+    closest_p = simplex.At(0).v;
+  }
+
+  // search direction
+  b2Vec2 dir = (-closest_p).normalized();
+  d = -bisectionDistance(shape, dir, max_distance_iterations, distance_tolerance, p1, p2);
+  return d;
+}
+
+bool b2ShapeDistance::BisectionDistance(const b2Shape * shape1,
+  const b2Shape * shape2, const b2Transform & xf2,
+  b2Scalar * dist, b2Vec2 * p1, b2Vec2 * p2) const
+{
+  b2MinkowskiDiff shape;
+  shape.shapes[0] = shape1;
+  shape.shapes[1] = shape2;
+  shape.toshape1 = xf2.linear().transpose();
+  shape.toshape0 = xf2;
+
+  b2Simplex simplex;
+  if (!ccdSeparation(shape, simplex, max_distance_iterations, distance_tolerance)) {
+    if (dist) *dist = b2Scalar(-1.0);
+    return false;
+  }
+
+  b2Vec2 p1_, p2_;
+  b2Scalar d = BisectionDistanceCore(shape, simplex, p1_, p2_);
+  if (dist) *dist = d;
+  if (p1) *p1 = p1_;
+  if (p2) *p2 = p2_;
+  return true;
+}
+
+bool b2ShapeDistance::BisectionDistance2(const b2Shape * shape1,
+  const b2Shape * shape2, const b2Transform & xf2,
+  b2Scalar * dist, b2Vec2 * p1, b2Vec2 * p2) const
+{
+  b2MinkowskiDiff shape;
+  shape.shapes[0] = shape1;
+  shape.shapes[1] = shape2;
+  shape.toshape1 = xf2.linear().transpose();
+  shape.toshape0 = xf2;
+
+  b2Simplex simplex;
+  if (!ccdSeparation(shape, simplex, max_distance_iterations, distance_tolerance)) {
+    if (dist) *dist = b2Scalar(-1.0);
+    return false;
+  }
+
+  b2Vec2 p1_, p2_;
+  b2Scalar d = -bisectionDistance2(shape, simplex, max_distance_iterations, distance_tolerance, p1_, p2_);
+  if (dist) *dist = d;
+  if (d > b2Scalar(0.0)) {
+    if (p1) *p1 = p1_;
+    if (p2) *p2 = p2_;
+    return true;
+  }
+  return false;
+}
+
+bool b2ShapeDistance::SignedBisectionDistance(const b2Shape * shape1,
+  const b2Shape * shape2, const b2Transform & xf2,
+  b2Scalar * dist, b2Vec2 * p1, b2Vec2 * p2) const
+{
+  b2MinkowskiDiff shape;
+  shape.shapes[0] = shape1;
+  shape.shapes[1] = shape2;
+  shape.toshape1 = xf2.linear().transpose();
+  shape.toshape0 = xf2;
+
+  b2Scalar d;
+  b2Vec2 p1_, p2_;
+
+  bool separation = true;
+  b2Simplex simplex;
+  if (separation = ccdSeparation(shape, simplex, max_distance_iterations, distance_tolerance)) {
+    d = BisectionDistanceCore(shape, simplex, p1_, p2_);
+    if (dist) *dist = d;
+    if (p1) *p1 = p1_;
+    if (p2) *p2 = p2_;
+    return true;
+  }
+
+  b2Polytope polytope;
+  if (!simplexToPolytope(shape, simplex, polytope)) {
+    if (dist) *dist = 0.0;
+    //extractClosestPoints(simplex, p1, p2, b2Vec2::Zero());
+    return false;
+  }
+
+  b2Vec2 dir_best;
+  b2Scalar dist_best = B2_INFINITY;
+  for (std::size_t i = 0, sz = polytope.ps.size(); i < sz; i++) {
+    std::size_t j = (i + 1) % sz;
+    b2Vec2 dir = b2Cross(polytope.ps[j].v - polytope.ps[i].v, b2Scalar(1.0)).normalized();
+    b2Vec2 last = shape.Support(dir);
+    b2Scalar dist = b2Dot(dir, last);
+    if (dist < dist_best) {
+      dir_best = dir;
+      dist_best = dist;
+    }
+  }
+  d = -bisectionDistance(shape, dir_best, max_distance_iterations, distance_tolerance, p1_, p2_);
+  if (dist) *dist = d;
+  if (p1) *p1 = p1_;
+  if (p2) *p2 = p2_;
+  return separation;
+}
+
+// With both transforms
 bool b2ShapeDistance::Separation(const b2Shape * shape1, const b2Transform & xf1,
   const b2Shape * shape2, const b2Transform & xf2) const
 {
@@ -700,54 +912,6 @@ bool b2ShapeDistance::SignedDistance(const b2Shape * shape1, const b2Transform &
   if (p1) *p1 = b2Mul(xf1, p1_);
   if (p2) *p2 = b2Mul(xf1, p2_);
   return d > b2Scalar(0.0);
-}
-
-b2Scalar b2ShapeDistance::BisectionDistanceCore(const b2MinkowskiDiff & shape, b2Simplex & simplex, b2Vec2 & p1, b2Vec2 & p2) const
-{
-  b2Vec2 closest_p;  // The point on the simplex that is closest to the origin
-  int sz = simplex.Size();
-  b2Scalar s = 0.0;
-  if (sz == 3) {
-    sz = 2;
-    b2Scalar distp = B2_INFINITY;
-    simplexReduceToSegment(simplex, distp, closest_p, &s);
-  }
-  else if (sz == 2) {
-    originSegmentClosestPoint(simplex.At(0).v, simplex.At(1).v, closest_p, &s);
-  }
-
-  b2Scalar d;
-  if (sz == 2 && (s != b2Scalar(0.0) && s != b2Scalar(1.0))) {
-    // bisection bounds
-    b2Vec2 dir1 = (-simplex.At(0).v).normalized();
-    b2Vec2 dir2 = (-simplex.At(1).v).normalized();
-    b2Vec2 last1 = shape.Support(dir1);
-    b2Scalar normal1 = b2Cross(last1, dir1);
-    b2Vec2 last2 = shape.Support(dir2);
-    b2Scalar normal2 = b2Cross(last2, dir2);
-    if (std::signbit(normal1) != std::signbit(normal2)) {
-      // found bisection bounds
-      b2Scalar dist1 = b2Dot(dir1, last1);
-      b2Scalar dist2 = b2Dot(dir2, last2);
-      if (dist1 < dist2) {
-        normal1 /= b2Abs(normal1);
-        d = -bisectionDistanceCore(shape, max_distance_iterations, distance_tolerance, dist1, true, last1, last2, normal1, p1, p2);
-      }
-      else {
-        normal2 /= b2Abs(normal2);
-        d = -bisectionDistanceCore(shape, max_distance_iterations, distance_tolerance, dist2, true, last2, last1, normal2, p1, p2);
-      }
-      return d;
-    }
-  }
-  if (sz == 1) {
-    closest_p = simplex.At(0).v;
-  }
-
-  // search direction
-  b2Vec2 dir = (-closest_p).normalized();
-  d = -bisectionDistance(shape, dir, max_distance_iterations, distance_tolerance, p1, p2);
-  return d;
 }
 
 bool b2ShapeDistance::BisectionDistance(const b2Shape * shape1, const b2Transform & xf1,

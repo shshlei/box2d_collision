@@ -118,6 +118,8 @@ public:
   // return collision
   bool Collide(b2NaiveCallback * callback, const b2AABB & aabb) const;
 
+  bool Collide(b2NaiveCallback * callback, const b2OBB & aabb) const;
+
   bool Collide(b2NaiveCallback * callback, const b2Vec2 & point) const;
 
   bool Collide(b2NaiveCallback * callback, const b2BVHManager * manager) const;

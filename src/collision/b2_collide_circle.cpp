@@ -85,7 +85,7 @@ bool b2CollidePolygonCircle(b2Manifold * manifold,
 
   // Vertices that subtend the incident face.
   int vertIndex1 = normalIndex;
-  int vertIndex2 = vertIndex1 + 1 < vertexCount ? vertIndex1 + 1 : 0;
+  int vertIndex2 = (vertIndex1 + 1 < vertexCount ? vertIndex1 + 1 : 0);
   const b2Vec2 & v1 = vertices[vertIndex1];
   const b2Vec2 & v2 = vertices[vertIndex2];
   // Compute barycentric coordinates
@@ -184,7 +184,7 @@ bool b2CollideRectangleCircle(b2Manifold * manifold,
     int min_axis = -1;
     const b2Vec2 & hsize = rectA->GetHalfSides();
     for (int i = 0; i < 2; ++i) {
-      b2Scalar dist = b(i) >= 0.0 ? hsize(i) - b(i) : b(i) + hsize(i);
+      b2Scalar dist = (b(i) >= 0.0 ? hsize(i) - b(i) : b(i) + hsize(i));
       // To be closer, the face has to be more than epsilon closer.
       if (dist + eps < min_distance) {
         min_distance = dist;
@@ -192,7 +192,7 @@ bool b2CollideRectangleCircle(b2Manifold * manifold,
       }
     }
     manifold->normal.setZero();
-    manifold->normal(min_axis) = b(min_axis) >= 0.0 ? 1.0 : -1.0;
+    manifold->normal(min_axis) = (b(min_axis) >= 0.0 ? 1.0 : -1.0);
     manifold->normal = b2Mul(xfA.linear(), manifold->normal);
     manifold->separation = -(min_distance + radius);
     manifold->point = c - manifold->normal * circleB->GetRadius();

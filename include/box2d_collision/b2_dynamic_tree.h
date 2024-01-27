@@ -94,8 +94,8 @@ public:
   const b2AABB & GetFatAABB(int proxyId) const;
 
   // Return collision
-  template <typename T>
-  bool Collide(T * callback, const b2AABB & aabb) const;
+  template <typename T, typename BV>
+  bool Collide(T * callback, const BV & aabb) const;
 
   template <typename T>
   bool Collide(T * callback, const b2Vec2 & point) const;
@@ -172,8 +172,8 @@ private:
   b2Scalar m_contact_distance{0.0};
 };
 
-template <typename T>
-bool b2DynamicTree::Collide(T * callback, const b2AABB & aabb) const
+template <typename T, typename BV>
+bool b2DynamicTree::Collide(T * callback, const BV & aabb) const
 {
   std::stack<int> stack;
   stack.push(m_root);

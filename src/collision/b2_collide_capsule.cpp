@@ -147,7 +147,7 @@ bool b2CollideCapsules(b2Manifold * manifold,
   bool collision = true;
   if (cross) {
     if (manifold) {
-      manifold->normal = dir.x() > b2Scalar(0.0) ? b2Vec2(b2Scalar(1.0), b2Scalar(0.0)) : b2Vec2(b2Scalar(-1.0), b2Scalar(0.0));
+      manifold->normal = (dir.x() > b2Scalar(0.0) ? b2Vec2(b2Scalar(1.0), b2Scalar(0.0)) : b2Vec2(b2Scalar(-1.0), b2Scalar(0.0)));
       b2Scalar l = sqrt(distSqr);
       if (l > B2_EPSILON)
         manifold->normal = dir / l;
@@ -160,7 +160,7 @@ bool b2CollideCapsules(b2Manifold * manifold,
     if (!collision && separationStop)
       return collision;
     if (manifold) {
-      manifold->normal = dir.x() > b2Scalar(0.0) ? b2Vec2(b2Scalar(1.0), b2Scalar(0.0)) : b2Vec2(b2Scalar(-1.0), b2Scalar(0.0));
+      manifold->normal = (dir.x() > b2Scalar(0.0) ? b2Vec2(b2Scalar(1.0), b2Scalar(0.0)) : b2Vec2(b2Scalar(-1.0), b2Scalar(0.0)));
       b2Scalar l = sqrt(distSqr);
       if (l > B2_EPSILON)
         manifold->normal = dir / l;

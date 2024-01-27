@@ -42,7 +42,7 @@ void b2PolygonShape::Set(const b2Vec2 * vertices, int count)
   // Compute normals. Ensure the edges have non-zero length.
   for (int i = 0; i < m_count; ++i) {
     m_vertices[i] = vertices[i];
-    int i2 = i + 1 < m_count ? i + 1 : 0;
+    int i2 = (i + 1 < m_count ? i + 1 : 0);
     b2Vec2 edge = vertices[i2] - vertices[i];
     m_normals[i] = b2Cross(edge, b2Scalar(1.0));
     m_normals[i].normalize();

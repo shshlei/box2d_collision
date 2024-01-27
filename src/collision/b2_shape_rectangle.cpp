@@ -81,7 +81,7 @@ bool b2RectangleShape::InscribedSphereAtPoint(const b2Vec2 & /*inp*/, const b2Ve
 
 b2Vec2 b2RectangleShape::SupportPoint(const b2Vec2 & dir) const
 {
-  b2Scalar x = dir.x() >= b2Scalar(0.0) ? m_hsides(0) : -m_hsides(0);
-  b2Scalar y = dir.y() >= b2Scalar(0.0) ? m_hsides(1) : -m_hsides(1);
+  b2Scalar x = (dir.x() >= b2Scalar(0.0) ? m_hsides(0) : -m_hsides(0));
+  b2Scalar y = (dir.y() >= b2Scalar(0.0) ? m_hsides(1) : -m_hsides(1));
   return b2Vec2(x, y);
 }

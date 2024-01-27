@@ -66,6 +66,61 @@ typedef Eigen::Rotation2D<b2Scalar> b2Rot;
 typedef Eigen::Transform<b2Scalar, 2, Eigen::Isometry> b2Transform;
 typedef Eigen::AlignedBox<b2Scalar, 2> b2AABB;
 
+class b2OBB
+{
+public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+  b2OBB() = default;
+
+  b2OBB(const b2Mat22 & axis, const b2Vec2 & center, const b2Vec2 & extent);
+
+  // Axis of the OBB
+  const b2Mat22 & axis() const;
+
+  // Axis of the OBB
+  const b2Vec2 & center() const;
+
+  // Extent of the OBB
+  const b2Vec2 & extent() const;
+
+  // Width of the OBB.
+  b2Scalar width() const;
+
+  // Height of the OBB.
+  b2Scalar height() const;
+
+  // Volume of the OBB
+  b2Scalar volume() const;
+
+  // Size of the OBB
+  b2Scalar size() const;
+
+  // Check whether the OBB contains a point.
+  bool contain(const b2Vec2 & p) const;
+
+  // Check collision between two OBB.
+  bool overlap(const b2OBB & other) const;
+
+  // Distance between two OBBs, not implemented.
+  // b2Scalar distance(const b2OBB & other, b2Vec2 * P = nullptr, b2Vec2 * Q = nullptr) const;
+
+private:
+  b2Mat22 axis_;
+
+  // Center of OBB
+  b2Vec2 center_;
+
+  // Half dimensions of OBB
+  b2Vec2 extent_;
+};
+
+void computeVertices(const b2OBB & b, b2Vec2 vertices[4]);
+
+// B rotation, T translation
+// a extent, b extent
+bool obbDisjoint(const b2Mat22 & B, const b2Vec2 & T, const b2Vec2 & a, const b2Vec2 & b);
+
 /// Perform the dot product on two vectors.
 inline b2Scalar b2Dot(const b2Vec2 & a, const b2Vec2 & b)
 {
@@ -173,7 +228,7 @@ inline b2Transform b2MulT(const b2Transform & A, const b2Transform & B)
 template <typename T>
 inline T b2Abs(T a)
 {
-  return a > T(0) ? a : -a;
+  return (a > T(0) ? a : -a);
 }
 
 inline b2Vec2 b2Abs(const b2Vec2 & a)
@@ -189,7 +244,7 @@ inline b2Mat22 b2Abs(const b2Mat22 & A)
 template <typename T>
 inline T b2Min(T a, T b)
 {
-  return a < b ? a : b;
+  return (a < b ? a : b);
 }
 
 inline b2Vec2 b2Min(const b2Vec2 & a, const b2Vec2 & b)
@@ -200,7 +255,7 @@ inline b2Vec2 b2Min(const b2Vec2 & a, const b2Vec2 & b)
 template <typename T>
 inline T b2Max(T a, T b)
 {
-  return a > b ? a : b;
+  return (a > b ? a : b);
 }
 
 inline b2Vec2 b2Max(const b2Vec2 & a, const b2Vec2 & b)
@@ -240,9 +295,28 @@ inline bool b2IsPowerOfTwo(unsigned int x)
   return result;
 }
 
+template <typename BV1, typename BV2>
+inline bool b2TestOverlap(const BV1 & a, const BV2 & b)
+{
+  return false;
+}
+
+template <>
 inline bool b2TestOverlap(const b2AABB & a, const b2AABB & b)
 {
   return a.intersects(b);
+}
+
+template <>
+inline bool b2TestOverlap(const b2AABB & a, const b2OBB & b)
+{
+  return !obbDisjoint(b.axis(), b.center() - a.center(), 0.5 * a.sizes(), b.extent());
+}
+
+template <>
+inline bool b2TestOverlap(const b2OBB & b, const b2AABB & a)
+{
+  return !obbDisjoint(b.axis(), b.center() - a.center(), 0.5 * a.sizes(), b.extent());
 }
 
 #endif

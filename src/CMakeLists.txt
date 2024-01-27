@@ -1,6 +1,7 @@
 set(BOX2D_SOURCE_FILES
     common/b2_logging.cpp
     common/b2_block_allocator.cpp
+    collision/b2_obb.cpp
     collision/b2_shape_circle.cpp
     collision/b2_shape_ellipse.cpp
     collision/b2_shape_capsule.cpp

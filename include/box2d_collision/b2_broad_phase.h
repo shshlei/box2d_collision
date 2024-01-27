@@ -61,8 +61,8 @@ public:
   template <typename T>
   bool Distance(T * callback, b2Scalar & dist);
 
-  template <typename T>
-  bool Collide(T * callback, const b2AABB & aabb) const;
+  template <typename T, typename BV>
+  bool Collide(T * callback, const BV & aabb) const;
 
   template <typename T>
   bool Collide(T * callback, const b2Vec2 & point) const;
@@ -132,8 +132,8 @@ private:
   std::unordered_set<int> m_activeBuffer;
 };
 
-template <typename T>
-bool b2BroadPhase::Collide(T * callback, const b2AABB & aabb) const
+template <typename T, typename BV>
+bool b2BroadPhase::Collide(T * callback, const BV & aabb) const
 {
   return m_tree.Collide(callback, aabb);
 }

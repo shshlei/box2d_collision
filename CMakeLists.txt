@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.2)
-project(box2d_collision VERSION 2.4.1)
+project(box2d_collision VERSION 3.0.0)
 
 add_definitions(-std=c++11)
 
